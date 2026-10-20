@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A release no longer fails after pushing its image when saving the build
+  cache fails ("failed to reserve cache"), which stopped v0.1.0's GitHub
+  Release being created.
+
 ## [0.1.0] - 2026-10-20
 
 ### Added
