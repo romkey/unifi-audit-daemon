@@ -68,10 +68,12 @@ repos:
         language: unsupported
         types_or: [python, pyi]
         pass_filenames: false
+      # Parses src/ with the project's Python (.python-version), since a
+      # hook environment may have an older one that can't read its syntax.
       - id: env-example
         name: .env.example lists every variable the app reads
-        entry: scripts/check-env-example.py
-        language: python
+        entry: uv run --locked python scripts/check-env-example.py
+        language: unsupported
         pass_filenames: false
         files: ^(src/.*\.py|\.env\.example)$
       - id: env-secrets
