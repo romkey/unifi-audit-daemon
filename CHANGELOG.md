@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `CONTACT_SHEET_TOKEN`: an optional second token that can only list and
+  download contact sheets.
+- A release badge in the README.
+
 ### Changed
 
 - Contact sheets are stored in `CONTACT_SHEET_DIR` (`/contact-sheets` in
@@ -13,11 +19,11 @@ All notable changes to this project are documented here. The format follows
   they can be served without exposing the log. Sheets from 0.1.0 are in
   `DATA_DIR/contact-sheets`; move them if you want to keep them.
 
-### Added
+### Fixed
 
-- `CONTACT_SHEET_TOKEN`: an optional second token that can only list and
-  download contact sheets.
-- A release badge in the README.
+- A release no longer fails after pushing its image when saving the build
+  cache fails ("failed to reserve cache"), which stopped v0.1.0's GitHub
+  Release being created.
 
 ## [0.1.0] - 2026-10-20
 
