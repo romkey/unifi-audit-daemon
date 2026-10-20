@@ -247,7 +247,11 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # The image is pushed before the cache is saved, and the two
+          # platforms' builds can clash saving the same layer ("failed to
+          # reserve cache"). A cache that isn't saved only slows the next
+          # build; it mustn't fail the release.
+          cache-to: type=gha,mode=max,ignore-error=true
           provenance: mode=max
           sbom: true
 
