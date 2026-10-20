@@ -1,11 +1,13 @@
-"""HTTP API. Everything but /healthz needs `Authorization: Bearer API_TOKEN`.
+"""HTTP API. Everything but /healthz needs `Authorization: Bearer <token>`:
+API_TOKEN for everything, or CONTACT_SHEET_TOKEN (if set) for the
+contact-sheet GETs only (marked *).
 
     GET  /healthz                             up, and its version
     GET  /api/v1/status                       sync and contact sheet status
     GET  /api/v1/events?since=ISO8601         audit records, JSON Lines
-    GET  /api/v1/contact-sheets               dates with a sheet
-    GET  /api/v1/contact-sheets/latest.jpg    the newest sheet
-    GET  /api/v1/contact-sheets/DATE.jpg      one night's sheet
+    GET  /api/v1/contact-sheets               dates with a sheet *
+    GET  /api/v1/contact-sheets/latest.jpg    the newest sheet *
+    GET  /api/v1/contact-sheets/DATE.jpg      one night's sheet *
     POST /api/v1/contact-sheets               take one now
 
 docs/api.md describes them in full.
@@ -45,6 +47,7 @@ class Api:
     sheets: ContactSheets
     status: Callable[[], Json]
     request_contact_sheet: Callable[[], bool]
+    contact_sheet_token: str | None = None
 
 
 class Server(ThreadingHTTPServer):
@@ -64,9 +67,12 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/healthz":
             self.send_json(HTTPStatus.OK, {"status": "ok", "version": __version__})
             return
-        if not self.authorized():
-            return
         api = self.server.api
+        if url.path == "/api/v1/contact-sheets" or SHEET_PATH.match(url.path):
+            if not self.authorized(api.contact_sheet_token):
+                return
+        elif not self.authorized():
+            return
         if url.path == "/api/v1/status":
             self.send_json(HTTPStatus.OK, api.status())
         elif url.path == "/api/v1/events":
@@ -90,12 +96,17 @@ class Handler(BaseHTTPRequestHandler):
                     HTTPStatus.SERVICE_UNAVAILABLE, {"error": "not running yet"}
                 )
 
-    def authorized(self) -> bool:
+    def authorized(self, also: str | None = None) -> bool:
+        """True if the request carries API_TOKEN, or `also` when given."""
         header = self.headers.get("Authorization", "")
-        scheme, _, token = header.partition(" ")
-        if scheme.lower() == "bearer" and hmac.compare_digest(
-            token.strip().encode(), self.server.api.token.encode()
-        ):
+        scheme, _, sent = header.partition(" ")
+        accepted = [self.server.api.token, *([also] if also else [])]
+        # Check every token, so the timing doesn't say which one matched.
+        matches = [
+            hmac.compare_digest(sent.strip().encode(), token.encode())
+            for token in accepted
+        ]
+        if scheme.lower() == "bearer" and any(matches):
             return True
         self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
         return False

@@ -64,7 +64,7 @@ def daemon_url(tmp_path: Path) -> Iterator[str]:
     api = Api(
         token=TOKEN,
         store=store,
-        sheets=ContactSheets(tmp_path),
+        sheets=ContactSheets(tmp_path / "sheets"),
         status=dict,
         request_contact_sheet=lambda: True,
     )

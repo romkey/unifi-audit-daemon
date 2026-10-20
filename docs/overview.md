@@ -23,19 +23,24 @@ a window; ids dedupe it); clients should dedupe by `id` too.
 - `config.py`: `Settings` from environment variables.
 - `protect.py`: `ProtectSource` protocol; `UiProtect` wraps uiprotect.
 - `store.py`: `AuditStore`: `DATA_DIR/audit/*.jsonl` and `state.json`.
+  Private; never in `CONTACT_SHEET_DIR`.
 - `sync.py`: `Syncer` and the event → record / message conversion.
-- `contact_sheet.py`: grid composition (Pillow) and `ContactSheets` on disk.
+- `contact_sheet.py`: grid composition (Pillow) and `ContactSheets` in
+  `CONTACT_SHEET_DIR`, which may be served semi-publicly.
 - `daemon.py`: sync and contact-sheet loops; `next_run` scheduling.
 - `server.py`: HTTP API (docs/api.md).
 - `contrib/member-zone/`: stdlib program Member Zone runs as an audit source.
 - `tests/`: pytest; `tests/fakes.py` is an in-memory Protect.
-- `Dockerfile`: `dev` and `production` stages; `/data` volume.
+- `Dockerfile`: `dev` and `production` stages; `/data` (private) and
+  `/contact-sheets` (shareable) volumes.
 
 ## Conventions
 
 - All configuration from environment variables; see docs/configuration.md.
 - Everything outside `protect.py` uses `ProtectSource`, never uiprotect.
 - Audit records are never rewritten or deleted.
+- The audit log and the contact sheets never share a directory or a token:
+  sheets may be shared, the log must not be.
 - Rules: https://github.com/romkey/python-ai-rules/blob/main/RULES.md
 
 ## Planned

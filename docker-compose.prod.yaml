@@ -28,9 +28,13 @@ services:
       retries: 3
       start_period: 10s
     volumes:
-      # The audit log and contact sheets: back this up.
+      # The audit log and sync state: private. Back it up.
       - data:/data
-    # Least privilege: nothing to write but /tmp and /data, no capabilities.
+      # The contact sheets only, kept apart so this volume can be mounted
+      # (read-only) into a web server without exposing the audit log.
+      - contact-sheets:/contact-sheets
+    # Least privilege: nothing to write but /tmp and the volumes, no
+    # capabilities.
     read_only: true
     tmpfs:
       - /tmp
@@ -41,3 +45,4 @@ services:
 
 volumes:
   data:
+  contact-sheets:

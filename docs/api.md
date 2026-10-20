@@ -1,7 +1,10 @@
 # HTTP API
 
 Every path under `/api/` needs `Authorization: Bearer <API_TOKEN>`;
-without it the answer is `401 {"error": "unauthorized"}`.
+without it the answer is `401 {"error": "unauthorized"}`. The contact-sheet
+GETs also accept `CONTACT_SHEET_TOKEN`, if it's set. That token reads
+nothing else: not the audit log, not the status, and it can't take a
+sheet.
 
 ## `GET /healthz`
 
@@ -65,14 +68,17 @@ One record:
 
 ## `GET /api/v1/contact-sheets`
 
+`API_TOKEN` or `CONTACT_SHEET_TOKEN`.
+
 `{"dates": ["2026-10-20", "2026-10-19"]}`: local dates with a sheet,
 newest first.
 
 ## `GET /api/v1/contact-sheets/latest.jpg`, `GET /api/v1/contact-sheets/YYYY-MM-DD.jpg`
 
-The JPEG, or `404`.
+`API_TOKEN` or `CONTACT_SHEET_TOKEN`. The JPEG, or `404`.
 
 ## `POST /api/v1/contact-sheets`
 
-Take a contact sheet now, replacing today's: `202 {"status": "started"}`.
+`API_TOKEN` only. Take a contact sheet now, replacing today's:
+`202 {"status": "started"}`.
 Watch `/api/v1/status` or the list for the result.

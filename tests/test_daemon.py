@@ -70,7 +70,7 @@ def make_daemon(tmp_path: Path) -> tuple[FakeSource, Daemon]:
     source = FakeSource()
     store = AuditStore(tmp_path)
     syncer = Syncer(source, store, overlap=timedelta(0), backfill=timedelta(hours=1))
-    return source, Daemon(settings, source, syncer, ContactSheets(tmp_path))
+    return source, Daemon(settings, source, syncer, ContactSheets(tmp_path / "sheets"))
 
 
 def test_request_before_running_is_refused(tmp_path: Path) -> None:

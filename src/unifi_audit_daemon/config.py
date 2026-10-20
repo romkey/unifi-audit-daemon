@@ -93,6 +93,10 @@ class Settings:
     unifi_port: int = 443
     unifi_verify_ssl: bool = True
     data_dir: Path = Path("data")
+    contact_sheet_dir: Path = Path("contact-sheets")
+    # A second, read-only token for the contact sheets alone, so they can be
+    # shared without the token that reads the audit log. None: API_TOKEN only.
+    contact_sheet_token: str | None = field(default=None, repr=False)
     sync_interval: int = 60
     sync_overlap: int = 600
     backfill_days: int = 7
@@ -113,6 +117,24 @@ class Settings:
         if len(api_token) < 16:
             raise ConfigError("API_TOKEN must be at least 16 characters")
 
+        sheet_token = env.get("CONTACT_SHEET_TOKEN", "").strip() or None
+        if sheet_token is not None:
+            if len(sheet_token) < 16:
+                raise ConfigError("CONTACT_SHEET_TOKEN must be at least 16 characters")
+            if sheet_token == api_token:
+                raise ConfigError("CONTACT_SHEET_TOKEN must differ from API_TOKEN")
+
+        data_dir = Path(env.get("DATA_DIR", "").strip() or cls.data_dir)
+        sheet_dir = Path(
+            env.get("CONTACT_SHEET_DIR", "").strip() or cls.contact_sheet_dir
+        )
+        # Whatever serves the contact sheets must not reach the audit log.
+        if data_dir.resolve().is_relative_to(sheet_dir.resolve()):
+            raise ConfigError(
+                "DATA_DIR must not be CONTACT_SHEET_DIR or inside it: "
+                "the contact sheets may be served, the audit log must not be"
+            )
+
         log_level = env.get("LOG_LEVEL", cls.log_level).upper()
         if log_level not in logging.getLevelNamesMapping():
             raise ConfigError(f"LOG_LEVEL {log_level!r} is not a logging level")
@@ -124,7 +146,9 @@ class Settings:
             api_token=api_token,
             unifi_port=_int(env, "UNIFI_PORT", cls.unifi_port, 1, 65535),
             unifi_verify_ssl=_bool(env, "UNIFI_VERIFY_SSL", cls.unifi_verify_ssl),
-            data_dir=Path(env.get("DATA_DIR", "").strip() or cls.data_dir),
+            data_dir=data_dir,
+            contact_sheet_dir=sheet_dir,
+            contact_sheet_token=sheet_token,
             sync_interval=_int(env, "SYNC_INTERVAL", cls.sync_interval, 5, 86400),
             sync_overlap=_int(env, "SYNC_OVERLAP", cls.sync_overlap, 0, 86400),
             backfill_days=_int(env, "BACKFILL_DAYS", cls.backfill_days, 0, 3650),

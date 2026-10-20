@@ -4,6 +4,7 @@
 [![Lint](https://github.com/romkey/unifi-audit-daemon/actions/workflows/lint.yaml/badge.svg)](https://github.com/romkey/unifi-audit-daemon/actions/workflows/lint.yaml)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/romkey/unifi-audit-daemon?color=blue)](https://github.com/romkey/unifi-audit-daemon/releases)
 
 A small daemon that keeps a complete, append-only audit log of UniFi
 Protect's events, and every night takes a contact sheet: one still from
@@ -13,7 +14,9 @@ lost. This daemon uses Protect's private API instead, which can list past
 events, so it catches up after downtime. It serves the log and the sheets
 over a small HTTP API, and [Member Zone](https://github.com/pdxhackerspace/member-zone)
 pulls the log into its audit logs with a bundled program. No database:
-the log is JSON Lines files on a volume.
+the log is JSON Lines files on a volume. The contact sheets are kept in a
+separate directory, with an optional token of their own, so they can be
+shared without exposing the audit log.
 
 > **AI disclosure:** This project was written by AI under human oversight,
 > following [these rules](https://github.com/romkey/python-ai-rules/blob/main/RULES.md).
@@ -47,12 +50,20 @@ recorded; by default it's everything, motion included.
 
 **Contact sheet.** At `CONTACT_SHEET_TIME` (default 03:00) in `TZ`, it
 snapshots every adopted camera, lays them out in a labelled grid and
-saves `DATA_DIR/contact-sheets/YYYY-MM-DD.jpg`. Offline or failed cameras
+saves `CONTACT_SHEET_DIR/YYYY-MM-DD.jpg`. Offline or failed cameras
 get a grey tile. Old sheets are deleted after
 `CONTACT_SHEET_RETENTION_DAYS`.
 
-**API.** Bearer-token auth (`API_TOKEN`) on everything but `/healthz`.
-Full details in [docs/api.md](docs/api.md).
+**Keeping the audit log private.** The audit log and sync state live in
+`DATA_DIR` (`/data`). The contact sheets live in `CONTACT_SHEET_DIR`
+(`/contact-sheets`), a separate volume holding only the JPEGs, so it can be
+mounted read-only into a web server. The daemon refuses to start if
+`DATA_DIR` is inside `CONTACT_SHEET_DIR`. Over the API, `CONTACT_SHEET_TOKEN`
+can list and download sheets and nothing else.
+
+**API.** Bearer-token auth (`API_TOKEN`) on everything but `/healthz`; the
+contact-sheet GETs also accept `CONTACT_SHEET_TOKEN`. Full details in
+[docs/api.md](docs/api.md).
 
 ```
 GET  /healthz
@@ -88,8 +99,8 @@ docker compose -f docker-compose.prod.yaml up -d
 
 That runs the latest release from `ghcr.io/romkey/unifi-audit-daemon`;
 set `APP_VERSION=X.Y.Z` to pin one. The API answers on
-http://localhost:8000. The log and sheets live in the `data` volume: back
-it up.
+http://localhost:8000. The audit log lives in the `data` volume (back it
+up) and the contact sheets in the `contact-sheets` volume.
 
 Put the daemon on a Docker network Member Zone can reach rather than
 publishing the port widely; the API token is the only protection.

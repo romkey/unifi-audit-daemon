@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Contact sheets are stored in `CONTACT_SHEET_DIR` (`/contact-sheets` in
+  the image, its own volume), apart from the audit log in `DATA_DIR`, so
+  they can be served without exposing the log. Sheets from 0.1.0 are in
+  `DATA_DIR/contact-sheets`; move them if you want to keep them.
+
+### Added
+
+- `CONTACT_SHEET_TOKEN`: an optional second token that can only list and
+  download contact sheets.
+- A release badge in the README.
+
 ## [0.1.0] - 2026-10-20
 
 ### Added

@@ -16,6 +16,7 @@ from unifi_audit_daemon.server import Api, make_server
 from unifi_audit_daemon.store import AuditStore
 
 TOKEN = "t" * 16
+SHEET_TOKEN = "s" * 16
 T0 = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
 
@@ -31,7 +32,7 @@ class Fixture:
 @pytest.fixture
 def app(tmp_path: Path) -> Iterator[Fixture]:
     store = AuditStore(tmp_path)
-    sheets = ContactSheets(tmp_path)
+    sheets = ContactSheets(tmp_path / "sheets")
     fixture = Fixture("", store, sheets)
 
     def request_contact_sheet() -> bool:
@@ -44,6 +45,7 @@ def app(tmp_path: Path) -> Iterator[Fixture]:
         sheets=sheets,
         status=lambda: {"sync": {"last_error": None}},
         request_contact_sheet=request_contact_sheet,
+        contact_sheet_token=SHEET_TOKEN,
     )
     server = make_server("127.0.0.1", 0, api)
     thread = threading.Thread(target=server.serve_forever)
@@ -89,6 +91,7 @@ def test_api_needs_token(app: Fixture, token: str | None) -> None:
         f"{app.url}/api/v1/contact-sheets", method="POST", token=token
     )
     assert status == 401
+    assert call(f"{app.url}/api/v1/contact-sheets/latest.jpg", token=token)[0] == 401
 
 
 def test_status(app: Fixture) -> None:
@@ -160,3 +163,20 @@ def test_take_contact_sheet_now(app: Fixture) -> None:
 def test_unknown_paths_are_404(app: Fixture) -> None:
     assert call_json(f"{app.url}/api/v1/nope") == (404, {"error": "not found"})
     assert call_json(f"{app.url}/nope", method="POST") == (404, {"error": "not found"})
+
+
+def test_contact_sheet_token_reads_sheets_only(app: Fixture) -> None:
+    app.sheets.save(date(2026, 10, 20), b"jpeg")
+    sheet = f"{app.url}/api/v1/contact-sheets"
+    assert call(f"{sheet}/latest.jpg", token=SHEET_TOKEN)[:2] == (200, "image/jpeg")
+    assert call(f"{sheet}/2026-10-20.jpg", token=SHEET_TOKEN)[0] == 200
+    assert call_json(sheet, token=SHEET_TOKEN) == (200, {"dates": ["2026-10-20"]})
+    # The audit log, status and taking a sheet stay behind API_TOKEN.
+    for url in (f"{app.url}/api/v1/events", f"{app.url}/api/v1/status"):
+        assert call(url, token=SHEET_TOKEN)[0] == 401
+    assert call(sheet, token=SHEET_TOKEN, method="POST")[0] == 401
+    assert app.requests == []
+
+
+def test_api_token_still_reads_sheets(app: Fixture) -> None:
+    assert call_json(f"{app.url}/api/v1/contact-sheets") == (200, {"dates": []})

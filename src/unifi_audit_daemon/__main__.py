@@ -50,7 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 async def run(settings: Settings, source: ProtectSource) -> int:
     store = AuditStore(settings.data_dir)
-    sheets = ContactSheets(settings.data_dir)
+    sheets = ContactSheets(settings.contact_sheet_dir)
     syncer = Syncer(
         source,
         store,
@@ -86,6 +86,7 @@ async def run(settings: Settings, source: ProtectSource) -> int:
         settings.port,
         Api(
             token=settings.api_token,
+            contact_sheet_token=settings.contact_sheet_token,
             store=store,
             sheets=sheets,
             status=status,
