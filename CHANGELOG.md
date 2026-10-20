@@ -16,3 +16,8 @@ All notable changes to this project are documented here. The format follows
   sheets, and taking a sheet on demand.
 - `contrib/member-zone/unifi_protect_audit.py`, a Member Zone audit log
   program that pulls the log from the daemon.
+
+### Fixed
+
+- The `.env.example` lint check runs with the project's Python 3.14, so it
+  can parse 3.14-only syntax (CI's runner Python is older).
