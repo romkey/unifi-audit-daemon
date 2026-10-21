@@ -20,6 +20,8 @@ def test_defaults() -> None:
     assert settings.unifi_port == 443
     assert settings.unifi_verify_ssl is True
     assert settings.data_dir == Path("data")
+    assert settings.contact_sheet_dir == Path("contact-sheets")
+    assert settings.contact_sheet_token is None
     assert settings.sync_interval == 60
     assert settings.event_types == ()
     assert settings.contact_sheet_time == time(3, 0)
@@ -36,6 +38,8 @@ def test_reads_environment() -> None:
         "UNIFI_PORT": "7443",
         "UNIFI_VERIFY_SSL": "no",
         "DATA_DIR": "/data",
+        "CONTACT_SHEET_DIR": "/contact-sheets",
+        "CONTACT_SHEET_TOKEN": "s" * 16,
         "SYNC_INTERVAL": "30",
         "SYNC_OVERLAP": "0",
         "BACKFILL_DAYS": "90",
@@ -52,6 +56,8 @@ def test_reads_environment() -> None:
     assert settings.unifi_port == 7443
     assert settings.unifi_verify_ssl is False
     assert settings.data_dir == Path("/data")
+    assert settings.contact_sheet_dir == Path("/contact-sheets")
+    assert settings.contact_sheet_token == "s" * 16
     assert settings.sync_interval == 30
     assert settings.sync_overlap == 0
     assert settings.backfill_days == 90
@@ -66,7 +72,8 @@ def test_reads_environment() -> None:
 
 
 def test_secrets_stay_out_of_repr() -> None:
-    text = repr(Settings.from_env(REQUIRED))
+    text = repr(Settings.from_env(REQUIRED | {"CONTACT_SHEET_TOKEN": "s" * 16}))
+    assert "s" * 16 not in text
     assert "dummy-password" not in text
     assert "t" * 16 not in text
 
@@ -100,3 +107,34 @@ def test_rejects_short_token() -> None:
 def test_rejects_bad_values(name: str, value: str, message: str) -> None:
     with pytest.raises(ConfigError, match=message):
         Settings.from_env(REQUIRED | {name: value})
+
+
+@pytest.mark.parametrize(
+    ("token", "message"),
+    [
+        ("short", "CONTACT_SHEET_TOKEN must be at least"),
+        ("t" * 16, "CONTACT_SHEET_TOKEN must differ from API_TOKEN"),
+    ],
+)
+def test_rejects_bad_contact_sheet_token(token: str, message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        Settings.from_env(REQUIRED | {"CONTACT_SHEET_TOKEN": token})
+
+
+@pytest.mark.parametrize(
+    ("data", "sheets"),
+    [
+        ("/srv/x", "/srv/x"),
+        ("/srv/x/audit", "/srv/x"),
+        ("/srv/x/./audit/..", "/srv/x"),
+    ],
+)
+def test_audit_log_must_not_be_inside_contact_sheets(data: str, sheets: str) -> None:
+    env = REQUIRED | {"DATA_DIR": data, "CONTACT_SHEET_DIR": sheets}
+    with pytest.raises(ConfigError, match="DATA_DIR must not be CONTACT_SHEET_DIR"):
+        Settings.from_env(env)
+
+
+def test_contact_sheets_may_sit_inside_data_dir() -> None:
+    env = REQUIRED | {"DATA_DIR": "/srv/x", "CONTACT_SHEET_DIR": "/srv/x/sheets"}
+    assert Settings.from_env(env).contact_sheet_dir == Path("/srv/x/sheets")

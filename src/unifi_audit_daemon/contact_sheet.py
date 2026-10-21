@@ -1,6 +1,9 @@
 """Nightly contact sheet: one still from every camera, on one JPEG.
 
-DATA_DIR/contact-sheets/YYYY-MM-DD.jpg   by the local date it was taken
+    CONTACT_SHEET_DIR/YYYY-MM-DD.jpg   by the local date it was taken
+
+The directory holds nothing else, so it can be served on its own, apart
+from the audit log in DATA_DIR.
 """
 
 import asyncio
@@ -103,8 +106,8 @@ def _decode(data: bytes | None) -> Image.Image | None:
 
 
 class ContactSheets:
-    def __init__(self, data_dir: Path) -> None:
-        self.directory = data_dir / "contact-sheets"
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
         self.directory.mkdir(parents=True, exist_ok=True)
 
     def dates(self) -> list[date]:

@@ -12,6 +12,9 @@ open a pull request; CI and Lint must pass before it can merge.
 
 - Protect is reached only through `protect.py` (`ProtectSource`); tests use
   `tests/fakes.py`. Never add real network calls to tests.
+- The audit log (`DATA_DIR`) is private; contact sheets
+  (`CONTACT_SHEET_DIR`, `CONTACT_SHEET_TOKEN`) may be shared. Never let
+  anything that serves or reads the sheets reach the log.
 - Audit records are append-only: never rewrite or delete them, and keep
   `recorded_at` increasing down the files (clients page by it).
 - `contrib/member-zone/` programs run inside Member Zone's image: standard

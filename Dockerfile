@@ -15,7 +15,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/venv \
     PATH=/venv/bin:$PATH \
     HOST=0.0.0.0 \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    CONTACT_SHEET_DIR=/contact-sheets
 WORKDIR /app
 
 FROM base AS build
@@ -41,11 +42,12 @@ FROM base AS production
 # Numeric, so orchestrators can verify it isn't root.
 RUN groupadd --system --gid 10001 app \
  && useradd --system --gid 10001 --uid 10001 --no-log-init --no-create-home app \
- && mkdir /data \
- && chown 10001:10001 /data
-# The audit log and contact sheets. A new named volume copies this
-# directory's ownership, so the app user can write to it.
-VOLUME /data
+ && mkdir /data /contact-sheets \
+ && chown 10001:10001 /data /contact-sheets
+# The audit log (private) and the contact sheets (may be served), kept
+# apart. A new named volume copies its directory's ownership, so the app
+# user can write to it.
+VOLUME /data /contact-sheets
 COPY --from=build /venv /venv
 USER 10001:10001
 EXPOSE 8000

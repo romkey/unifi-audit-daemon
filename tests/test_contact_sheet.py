@@ -58,7 +58,7 @@ def test_compose_with_no_cameras() -> None:
 
 
 def test_sheets_store(tmp_path: Path) -> None:
-    sheets = ContactSheets(tmp_path)
+    sheets = ContactSheets(tmp_path / "sheets")
     assert sheets.dates() == []
     assert sheets.latest() is None
     for day in (1, 3, 2):
@@ -78,7 +78,7 @@ def test_sheets_store(tmp_path: Path) -> None:
 def test_make_contact_sheet(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     source = FakeSource()
     source.failing.add("cam2")
-    sheets = ContactSheets(tmp_path)
+    sheets = ContactSheets(tmp_path / "sheets")
     sheets.save(date(2026, 9, 1), b"old")
     taken_at = datetime(2026, 10, 20, 3, 0, tzinfo=PACIFIC)
 
@@ -104,7 +104,7 @@ def test_make_contact_sheet_without_cameras(tmp_path: Path) -> None:
     path = asyncio.run(
         make_contact_sheet(
             source,
-            ContactSheets(tmp_path),
+            ContactSheets(tmp_path / "sheets"),
             datetime(2026, 10, 20, 3, 0, tzinfo=PACIFIC),
             tile_width=160,
             columns=0,

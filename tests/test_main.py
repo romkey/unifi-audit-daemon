@@ -46,7 +46,8 @@ def test_main_builds_the_client_and_runs(
 ) -> None:
     for name, value in ENV.items():
         monkeypatch.setenv(name, value)
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("CONTACT_SHEET_DIR", str(tmp_path / "sheets"))
     ran: list[tuple[Settings, ProtectSource]] = []
 
     async def fake_run(settings: Settings, source: ProtectSource) -> int:
@@ -56,12 +57,17 @@ def test_main_builds_the_client_and_runs(
     monkeypatch.setattr(cli, "run", fake_run)
     monkeypatch.setattr(cli, "UiProtect", lambda *a, **k: FakeSource())
     assert cli.main([]) == 0
-    assert ran[0][0].data_dir == tmp_path
+    assert ran[0][0].data_dir == tmp_path / "data"
+    assert ran[0][0].contact_sheet_dir == tmp_path / "sheets"
 
 
 def running_settings(tmp_path: Path) -> Settings:
     # Port 0 picks a free one; PORT itself must be 1-65535.
-    return replace(Settings.from_env(ENV | {"DATA_DIR": str(tmp_path)}), port=0)
+    env = ENV | {
+        "DATA_DIR": str(tmp_path / "data"),
+        "CONTACT_SHEET_DIR": str(tmp_path / "sheets"),
+    }
+    return replace(Settings.from_env(env), port=0)
 
 
 def test_run_serves_until_sigterm(
@@ -87,7 +93,7 @@ def test_run_serves_until_sigterm(
     async def scenario() -> int:
         running = asyncio.create_task(cli.run(running_settings(tmp_path), source))
         # Wait for the first sync to save its cursor.
-        while not (tmp_path / "state.json").exists():
+        while not (tmp_path / "data" / "state.json").exists():
             await asyncio.sleep(0.01)
 
         assert await asyncio.to_thread(healthz, ports[0]) == 200
@@ -96,6 +102,15 @@ def test_run_serves_until_sigterm(
         assert status["sync"]["cursor"] is not None
         assert status["sync"]["last_error"] is None
         assert status["contact_sheet"]["latest"] is None
+
+        # A sheet taken now lands in its own directory, not beside the log.
+        assert apis[0].request_contact_sheet()
+        while not list((tmp_path / "sheets").glob("*.jpg")):
+            await asyncio.sleep(0.01)
+        assert sorted(p.name for p in (tmp_path / "data").iterdir()) == [
+            "audit",
+            "state.json",
+        ]
         assert json.dumps(status)
 
         os.kill(os.getpid(), signal.SIGTERM)

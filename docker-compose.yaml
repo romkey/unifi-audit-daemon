@@ -28,7 +28,9 @@ services:
       - .:/app
       - uv-cache:/root/.cache/uv
       - data:/data
+      - contact-sheets:/contact-sheets
 
 volumes:
   uv-cache:
   data:
+  contact-sheets:
