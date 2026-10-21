@@ -28,7 +28,7 @@ value stops the app with a message naming the variable.
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `CONTACT_SHEET_DIR` | `contact-sheets` (`/contact-sheets` in the image) | Where the contact sheets live, and nothing else, so this directory can be served on its own. It must not be `DATA_DIR` or contain it. |
+| `CONTACT_SHEET_DIR` | `contact-sheets` (`/contact-sheets` in the image) | Where the contact sheets and their browsing page (`index.html`) live, and nothing else, so this directory can be served on its own. It must not be `DATA_DIR` or contain it. |
 | `CONTACT_SHEET_TOKEN` | none | A second bearer token that can only list and download contact sheets, to share with their viewers instead of `API_TOKEN`. At least 16 characters; must differ from `API_TOKEN`. |
 | `CONTACT_SHEET_TIME` | `03:00` | Local time, `HH:MM`, to take the nightly sheet |
 | `TZ` | system zone (UTC in a container) | IANA time zone, e.g. `America/Los_Angeles`, for `CONTACT_SHEET_TIME` and the sheet's date |

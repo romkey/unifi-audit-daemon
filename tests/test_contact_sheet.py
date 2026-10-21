@@ -75,6 +75,36 @@ def test_sheets_store(tmp_path: Path) -> None:
     assert sheets.dates() == [date(2026, 10, 3), date(2026, 10, 2)]
 
 
+def index(sheets: ContactSheets) -> str:
+    return (sheets.directory / "index.html").read_text()
+
+
+def test_index_follows_the_sheets(tmp_path: Path) -> None:
+    directory = tmp_path / "sheets"
+    directory.mkdir()
+    (directory / "2026-09-30.jpg").write_bytes(b"from before the page existed")
+
+    sheets = ContactSheets(directory)
+    assert 'src="2026-09-30.jpg"' in index(sheets)
+
+    sheets.save(date(2026, 10, 2), b"jpeg")
+    assert 'src="2026-10-02.jpg"' in index(sheets)
+    assert "All 2 contact sheets" in index(sheets)
+
+    sheets.prune(date(2026, 10, 2), keep_days=1)
+    assert sheets.dates() == [date(2026, 10, 2)]
+    assert "2026-09-30" not in index(sheets)
+
+    # Pruning nothing leaves the page alone.
+    before = (directory / "index.html").stat().st_mtime_ns
+    sheets.prune(date(2026, 10, 2), keep_days=1)
+    assert (directory / "index.html").stat().st_mtime_ns == before
+    assert sorted(p.name for p in directory.iterdir()) == [
+        "2026-10-02.jpg",
+        "index.html",
+    ]
+
+
 def test_make_contact_sheet(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     source = FakeSource()
     source.failing.add("cam2")
