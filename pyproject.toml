@@ -1,6 +1,6 @@
 [project]
 name = "unifi-audit-daemon"
-version = "0.2.0"
+version = "0.2.1"
 description = "Syncs UniFi Protect's event history to an append-only audit log, serves it over HTTP, and takes a nightly contact sheet of every camera."
 readme = "README.md"
 license = "MIT"

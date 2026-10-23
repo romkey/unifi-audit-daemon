@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-23
+
 ### Added
 
 - `CONTACT_SHEET_DIR/index.html`, rewritten whenever a sheet is saved or
