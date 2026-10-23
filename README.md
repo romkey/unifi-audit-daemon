@@ -50,16 +50,21 @@ recorded; by default it's everything, motion included.
 
 **Contact sheet.** At `CONTACT_SHEET_TIME` (default 03:00) in `TZ`, it
 snapshots every adopted camera, lays them out in a labelled grid and
-saves `CONTACT_SHEET_DIR/YYYY-MM-DD.jpg`. Offline or failed cameras
+saves `CONTACT_SHEET_DIR/YYYY-MM-DD.jpg`, then rewrites
+`CONTACT_SHEET_DIR/index.html`: a static page that shows the newest sheet
+and pages back through older ones. Offline or failed cameras
 get a grey tile. Old sheets are deleted after
 `CONTACT_SHEET_RETENTION_DAYS`.
 
 **Keeping the audit log private.** The audit log and sync state live in
 `DATA_DIR` (`/data`). The contact sheets live in `CONTACT_SHEET_DIR`
-(`/contact-sheets`), a separate volume holding only the JPEGs, so it can be
-mounted read-only into a web server. The daemon refuses to start if
-`DATA_DIR` is inside `CONTACT_SHEET_DIR`. Over the API, `CONTACT_SHEET_TOKEN`
-can list and download sheets and nothing else.
+(`/contact-sheets`), a separate volume holding only the JPEGs and their
+`index.html`, so it can be mounted read-only into a web server, which then
+serves the browsing page too. The daemon refuses to start if `DATA_DIR` is
+inside `CONTACT_SHEET_DIR`. Over the API, `CONTACT_SHEET_TOKEN` can list and
+download sheets and nothing else. (The page is for a web server: a browser
+can't send a bearer token for its images, so it doesn't work through the
+API.)
 
 **API.** Bearer-token auth (`API_TOKEN`) on everything but `/healthz`; the
 contact-sheet GETs also accept `CONTACT_SHEET_TOKEN`. Full details in

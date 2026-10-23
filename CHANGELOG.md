@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `CONTACT_SHEET_DIR/index.html`, rewritten whenever a sheet is saved or
+  pruned: shows the newest contact sheet, pages to older ones (buttons,
+  arrow keys, `#YYYY-MM-DD` links), and lists them all. Static and
+  relative, so any web server serving the directory serves the page.
+
 ## [0.2.0] - 2026-10-21
 
 ### Added

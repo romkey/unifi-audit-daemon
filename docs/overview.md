@@ -27,6 +27,7 @@ a window; ids dedupe it); clients should dedupe by `id` too.
 - `sync.py`: `Syncer` and the event → record / message conversion.
 - `contact_sheet.py`: grid composition (Pillow) and `ContactSheets` in
   `CONTACT_SHEET_DIR`, which may be served semi-publicly.
+- `contact_sheet_index.py`: the static `index.html` for browsing them.
 - `daemon.py`: sync and contact-sheet loops; `next_run` scheduling.
 - `server.py`: HTTP API (docs/api.md).
 - `contrib/member-zone/`: stdlib program Member Zone runs as an audit source.

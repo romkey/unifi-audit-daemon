@@ -1,6 +1,7 @@
 """Nightly contact sheet: one still from every camera, on one JPEG.
 
     CONTACT_SHEET_DIR/YYYY-MM-DD.jpg   by the local date it was taken
+    CONTACT_SHEET_DIR/index.html       a page for browsing them
 
 The directory holds nothing else, so it can be served on its own, apart
 from the audit log in DATA_DIR.
@@ -19,6 +20,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 from uiprotect.exceptions import UnifiProtectError
 
+from unifi_audit_daemon.contact_sheet_index import INDEX_NAME, render_index
 from unifi_audit_daemon.protect import ProtectSource
 
 logger = logging.getLogger(__name__)
@@ -109,6 +111,9 @@ class ContactSheets:
     def __init__(self, directory: Path) -> None:
         self.directory = directory
         self.directory.mkdir(parents=True, exist_ok=True)
+        # Brings the page up to date with whatever is already here, e.g.
+        # sheets taken before the page existed.
+        self.write_index()
 
     def dates(self) -> list[date]:
         """Dates with a sheet, newest first."""
@@ -131,20 +136,33 @@ class ContactSheets:
 
     def save(self, day: date, jpeg: bytes) -> Path:
         path = self.directory / f"{day.isoformat()}.jpg"
-        temporary = path.with_name(f".{path.name}.tmp")
-        temporary.write_bytes(jpeg)
-        temporary.replace(path)
+        _write_atomically(path, jpeg)
+        self.write_index()
         return path
+
+    def write_index(self) -> None:
+        """Rewrite index.html to list the sheets now in the directory."""
+        page = render_index(self.dates())
+        _write_atomically(self.directory / INDEX_NAME, page.encode())
 
     def prune(self, today: date, keep_days: int) -> None:
         """Delete sheets older than keep_days (0 keeps them all)."""
         if keep_days <= 0:
             return
         oldest = today - timedelta(days=keep_days - 1)
-        for day in self.dates():
-            if day < oldest:
-                logger.info("deleting contact sheet for %s", day)
-                (self.directory / f"{day.isoformat()}.jpg").unlink(missing_ok=True)
+        old = [day for day in self.dates() if day < oldest]
+        for day in old:
+            logger.info("deleting contact sheet for %s", day)
+            (self.directory / f"{day.isoformat()}.jpg").unlink(missing_ok=True)
+        if old:
+            self.write_index()
+
+
+def _write_atomically(path: Path, data: bytes) -> None:
+    # A reader (or web server) sees the old file or the new one, never half.
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_bytes(data)
+    temporary.replace(path)
 
 
 async def make_contact_sheet(
