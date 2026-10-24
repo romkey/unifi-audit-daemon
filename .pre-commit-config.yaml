@@ -4,6 +4,9 @@
 #   .github/workflows/lint.yaml                                # CI
 # Renovate keeps the revs current.
 
+# Third-party files kept exactly as published.
+exclude: ^src/unifi_audit_daemon/vendor/
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

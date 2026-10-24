@@ -52,8 +52,9 @@ class ProtectSource(Protocol):
 
     async def cameras(self) -> list[Camera]: ...
 
-    async def snapshot(self, camera_id: str, width: int) -> bytes | None:
-        """A JPEG from the camera now, or None if it couldn't give one."""
+    async def snapshot(self, camera_id: str, width: int | None = None) -> bytes | None:
+        """A JPEG from the camera now (full resolution unless `width` is
+        given), or None if it couldn't give one."""
         ...
 
     async def close(self) -> None: ...
@@ -114,7 +115,7 @@ class UiProtect:
             key=lambda c: c.name.casefold(),
         )
 
-    async def snapshot(self, camera_id: str, width: int) -> bytes | None:
+    async def snapshot(self, camera_id: str, width: int | None = None) -> bytes | None:
         return await self._client.get_camera_snapshot(camera_id, width=width)
 
     async def close(self) -> None:

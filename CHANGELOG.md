@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Every contact sheet now also keeps each camera's full-resolution
+  snapshot and a thumbnail of it in `CONTACT_SHEET_DIR/YYYY-MM-DD/`
+  (listed in its `cameras.json`). Retakes replace them; pruning deletes
+  them with the sheet.
+- `index.html` shows a night's cameras as thumbnails; clicking one opens
+  a lightbox (GLightbox, bundled and copied to `CONTACT_SHEET_DIR/assets/`,
+  so the page still needs nothing from the internet) that steps through
+  that night's full-resolution snapshots. Older/Newer still pages between
+  nights, and sheets from before this release still show as the single
+  image.
+
+### Changed
+
+- Snapshots are fetched from Protect at full resolution and scaled
+  locally for the sheet; `CONTACT_SHEET_TILE_WIDTH` sets the sheet's tile
+  and thumbnail width. Expect `CONTACT_SHEET_DIR` to grow by a megabyte
+  or more per camera per night.
+
 ## [0.2.1] - 2026-10-23
 
 ### Added

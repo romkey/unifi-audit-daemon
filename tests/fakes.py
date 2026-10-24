@@ -54,6 +54,7 @@ class FakeSource:
         ]
         self.images: dict[str, bytes | None] = {"cam1": jpeg(), "cam2": None}
         self.failing: set[str] = set()
+        self.snapshot_widths: list[int | None] = []
         self.closed = False
 
     async def events(
@@ -72,7 +73,8 @@ class FakeSource:
     async def cameras(self) -> list[Camera]:
         return self.camera_list
 
-    async def snapshot(self, camera_id: str, width: int) -> bytes | None:
+    async def snapshot(self, camera_id: str, width: int | None = None) -> bytes | None:
+        self.snapshot_widths.append(width)
         if camera_id in self.failing:
             raise NvrError("console unreachable")
         return self.images.get(camera_id)

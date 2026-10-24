@@ -49,20 +49,27 @@ Records are never changed or deleted. `EVENT_TYPES` limits what's
 recorded; by default it's everything, motion included.
 
 **Contact sheet.** At `CONTACT_SHEET_TIME` (default 03:00) in `TZ`, it
-snapshots every adopted camera, lays them out in a labelled grid and
-saves `CONTACT_SHEET_DIR/YYYY-MM-DD.jpg`, then rewrites
-`CONTACT_SHEET_DIR/index.html`: a static page that shows the newest sheet
-and pages back through older ones. Offline or failed cameras
-get a grey tile. Old sheets are deleted after
-`CONTACT_SHEET_RETENTION_DAYS`.
+takes a full-resolution snapshot from every adopted camera, lays them out
+in a labelled grid and saves `CONTACT_SHEET_DIR/YYYY-MM-DD.jpg`. It also
+keeps each snapshot, with a thumbnail, in `CONTACT_SHEET_DIR/YYYY-MM-DD/`.
+Then it rewrites `CONTACT_SHEET_DIR/index.html`, a static page that shows
+the newest night's thumbnails and pages back through older nights.
+Clicking a thumbnail opens that night's full-resolution snapshots in a
+lightbox ([GLightbox](https://github.com/biati-digital/glightbox), bundled
+and copied to `CONTACT_SHEET_DIR/assets/`) that steps from camera to
+camera. Offline or failed cameras get a grey tile. Old sheets and their
+snapshots are deleted after `CONTACT_SHEET_RETENTION_DAYS`; full-resolution
+snapshots are often a megabyte or more per camera per night, so allow for
+that when choosing it.
 
 **Keeping the audit log private.** The audit log and sync state live in
 `DATA_DIR` (`/data`). The contact sheets live in `CONTACT_SHEET_DIR`
 (`/contact-sheets`), a separate volume holding only the JPEGs and their
-`index.html`, so it can be mounted read-only into a web server, which then
+browsing page, so it can be mounted read-only into a web server, which then
 serves the browsing page too. The daemon refuses to start if `DATA_DIR` is
 inside `CONTACT_SHEET_DIR`. Over the API, `CONTACT_SHEET_TOKEN` can list and
-download sheets and nothing else. (The page is for a web server: a browser
+download sheets and nothing else; the API serves the composite sheets
+only, not the snapshots. (The page is for a web server: a browser
 can't send a bearer token for its images, so it doesn't work through the
 API.)
 
