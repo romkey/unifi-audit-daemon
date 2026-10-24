@@ -80,7 +80,7 @@ def main(argv: list[str]) -> int:
                 continue
             for value, key in secrets.items():
                 if value in line:
-                    print(f"{name}:{number}: contains the value of {key} from .env")
+                    print(f"{name}:{number}: contains a value from .env")
                     failed = True
     if failed:
         print("Remove it (and rotate it if it was ever pushed).")
