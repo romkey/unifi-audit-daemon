@@ -78,9 +78,9 @@ def main(argv: list[str]) -> int:
         for number, line in enumerate(lines, 1):
             if ALLOW in line:
                 continue
-            for value, key in secrets.items():
+            for value in secrets:
                 if value in line:
-                    print(f"{name}:{number}: contains the value of {key} from .env")
+                    print(f"{name}:{number}: contains a value from .env")
                     failed = True
     if failed:
         print("Remove it (and rotate it if it was ever pushed).")
