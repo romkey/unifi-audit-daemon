@@ -156,10 +156,18 @@ TEMPLATE = """<!doctype html>
   // still a plain link to its snapshot.
   var lightbox = null;
   var lightboxOpen = false;
+  var slides = [];  // the night shown
   if (window.GLightbox) {
     lightbox = window.GLightbox({ elements: [], loop: true });
     lightbox.on("open", function () { lightboxOpen = true; });
-    lightbox.on("close", function () { lightboxOpen = false; });
+    lightbox.on("close", function () {
+      lightboxOpen = false;
+      // Paging to another night while it was open (e.g. Back) left its
+      // slides in place, since swapping them mid-close removes the slide
+      // whose animation finishes the close. GLightbox still counts itself
+      // open until this handler returns, so swap them on the next tick.
+      setTimeout(function () { lightbox.setElements(slides); }, 0);
+    });
   }
 
   // GLightbox shows the title as HTML; camera names are text.
@@ -177,7 +185,7 @@ TEMPLATE = """<!doctype html>
 
   function gallery(sheet) {
     var list = el("ul", { "class": "cameras" });
-    var slides = [];
+    slides = [];
     sheet.pictures.forEach(function (p) {
       var item = el("li", {});
       if (p.image) {
@@ -196,7 +204,7 @@ TEMPLATE = """<!doctype html>
       item.appendChild(el("span", {}, p.name));
       list.appendChild(item);
     });
-    if (lightbox) lightbox.setElements(slides);
+    if (lightbox && !lightboxOpen) lightbox.setElements(slides);
     return list;
   }
 
