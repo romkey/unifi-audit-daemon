@@ -75,9 +75,11 @@ jobs:
             echo "::error::Tag v$version already exists"
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
           echo "Releasing v$version (latest was $latest)"
 
       # The package and image report this version; it isn't committed.
@@ -96,13 +98,16 @@ jobs:
       - name: Image tags
         id: meta
         uses: docker/metadata-action@v6
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          MAJOR: ${{ !startsWith(steps.version.outputs.tag, 'v0.') }}
         with:
           images: ${{ steps.version.outputs.image }}
           flavor: latest=false
           tags: |
-            type=semver,pattern={{version}},value=${{ steps.version.outputs.tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.tag }}
-            type=semver,pattern={{major}},value=${{ steps.version.outputs.tag }},enable=${{ !startsWith(steps.version.outputs.tag, 'v0.') }}
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
+            type=semver,pattern={{major}},value=${{ env.TAG }},enable=${{ env.MAJOR }}
             type=raw,value=latest
 
       - name: Dry run summary
@@ -182,7 +187,7 @@ jobs:
           PYPI_PUBLISH: ${{ vars.PYPI_PUBLISH }}
         run: |
           {
-            printf '**Image:** `%s:%s`\n' "$IMAGE" "$VERSION"
+            printf '**Image:** %s\n' "\`$IMAGE:$VERSION\`"
             if [ "$PYPI_PUBLISH" = true ]; then
               printf '\n**PyPI:** https://pypi.org/project/%s/%s/\n' "$NAME" "$VERSION"
             fi
