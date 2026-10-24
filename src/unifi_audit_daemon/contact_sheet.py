@@ -200,11 +200,15 @@ class ContactSheets:
 
         Slow with full-resolution tiles; run it off the event loop.
         """
-        if tiles is not None:
-            self._save_pictures(day, tiles, tile_width)
         path = self.directory / f"{day.isoformat()}.jpg"
-        _write_atomically(path, jpeg)
-        self.write_index()
+        try:
+            # The sheet first, so a night never has snapshots without one.
+            _write_atomically(path, jpeg)
+            if tiles is not None:
+                self._save_pictures(day, tiles, tile_width)
+        finally:
+            # Even if a write failed, so the page lists only what's here.
+            self.write_index()
         return path
 
     def _save_pictures(self, day: date, tiles: Sequence[Tile], tile_width: int) -> None:
@@ -240,6 +244,14 @@ class ContactSheets:
         building.replace(final)
         shutil.rmtree(old, ignore_errors=True)
 
+    def _stored_days(self) -> set[date]:
+        """Dates with a sheet or a snapshot folder (which may have lost its sheet)."""
+        return {
+            date.fromisoformat(name)
+            for p in self.directory.iterdir()
+            if SHEET_NAME.match(name := p.name.removesuffix(".jpg"))
+        }
+
     def write_index(self) -> None:
         """Rewrite index.html to list the sheets now in the directory."""
         page = render_index([Sheet(day, self.pictures(day)) for day in self.dates()])
@@ -258,7 +270,7 @@ class ContactSheets:
         if keep_days <= 0:
             return
         oldest = today - timedelta(days=keep_days - 1)
-        old = [day for day in self.dates() if day < oldest]
+        old = sorted(day for day in self._stored_days() if day < oldest)
         for day in old:
             logger.info("deleting contact sheet for %s", day)
             (self.directory / f"{day.isoformat()}.jpg").unlink(missing_ok=True)

@@ -1,6 +1,7 @@
 import asyncio
 import io
 import logging
+import re
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -9,6 +10,7 @@ import pytest
 from PIL import Image
 
 from tests.fakes import FakeSource, jpeg
+from unifi_audit_daemon import contact_sheet
 from unifi_audit_daemon.contact_sheet import (
     GAP,
     HEADER_HEIGHT,
@@ -171,6 +173,61 @@ def test_save_keeps_snapshots_and_thumbnails(tmp_path: Path) -> None:
     sheets.prune(date(2026, 11, 30), keep_days=1)
     assert sheets.dates() == []
     assert not folder.exists()
+
+
+def snapshot_links(sheets: ContactSheets) -> list[str]:
+    return re.findall(r'(?:href|src)="(\d{4}-\d{2}-\d{2}/[^"]+)"', index(sheets))
+
+
+def test_a_failed_save_leaves_the_page_matching_the_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sheets = ContactSheets(tmp_path / "sheets")
+    day = date(2026, 10, 20)
+    sheets.save(day, b"sheet", [Tile("Front", jpeg())], tile_width=160)
+    write = contact_sheet._write_atomically
+
+    def no_room_for_sheets(path: Path, data: bytes) -> None:
+        if path.name == "2026-10-20.jpg":
+            raise OSError("disk full")
+        write(path, data)
+
+    # The sheet can't be written: the night keeps its old snapshots.
+    monkeypatch.setattr(contact_sheet, "_write_atomically", no_room_for_sheets)
+    with pytest.raises(OSError, match="disk full"):
+        sheets.save(day, b"retake", [Tile("Back", jpeg())], tile_width=160)
+    assert snapshot_links(sheets) == [
+        "2026-10-20/01-front.jpg",
+        "2026-10-20/01-front-thumb.jpg",
+    ]
+
+    # The snapshots can't be: the new sheet, with the old snapshots.
+    monkeypatch.setattr(contact_sheet, "_write_atomically", write)
+
+    def broken(data: bytes | None, tile_width: int) -> bytes | None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(contact_sheet, "thumbnail", broken)
+    with pytest.raises(OSError, match="disk full"):
+        sheets.save(day, b"retake", [Tile("Back", jpeg())], tile_width=160)
+    assert (sheets.directory / "2026-10-20.jpg").read_bytes() == b"retake"
+    for link in snapshot_links(sheets):
+        assert (sheets.directory / link).is_file()
+    assert len(snapshot_links(sheets)) == 2
+
+
+def test_prune_deletes_snapshots_that_lost_their_sheet(tmp_path: Path) -> None:
+    sheets = ContactSheets(tmp_path / "sheets")
+    sheets.save(date(2026, 10, 1), b"sheet", [Tile("Front", jpeg())], tile_width=160)
+    sheets.save(date(2026, 10, 20), b"sheet")
+    (sheets.directory / "2026-10-01.jpg").unlink()
+
+    sheets.prune(date(2026, 10, 20), keep_days=7)
+    assert sorted(p.name for p in sheets.directory.iterdir()) == [
+        "2026-10-20.jpg",
+        "assets",
+        "index.html",
+    ]
 
 
 def test_sheets_without_snapshots(
