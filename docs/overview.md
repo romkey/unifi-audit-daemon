@@ -25,9 +25,12 @@ a window; ids dedupe it); clients should dedupe by `id` too.
 - `store.py`: `AuditStore`: `DATA_DIR/audit/*.jsonl` and `state.json`.
   Private; never in `CONTACT_SHEET_DIR`.
 - `sync.py`: `Syncer` and the event → record / message conversion.
-- `contact_sheet.py`: grid composition (Pillow) and `ContactSheets` in
-  `CONTACT_SHEET_DIR`, which may be served semi-publicly.
+- `contact_sheet.py`: grid composition (Pillow), thumbnails, and
+  `ContactSheets` in `CONTACT_SHEET_DIR` (sheets, each night's
+  full-resolution snapshots), which may be served semi-publicly.
 - `contact_sheet_index.py`: the static `index.html` for browsing them.
+- `vendor/glightbox/`: the page's lightbox (MIT), unchanged from npm and
+  copied into `CONTACT_SHEET_DIR/assets/` at startup.
 - `daemon.py`: sync and contact-sheet loops; `next_run` scheduling.
 - `server.py`: HTTP API (docs/api.md).
 - `contrib/member-zone/`: stdlib program Member Zone runs as an audit source.

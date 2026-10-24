@@ -50,7 +50,7 @@ class FakeClient:
             users={"u1": Device("u1", "Alice")},
         )
 
-    async def get_camera_snapshot(self, camera_id: str, width: int) -> bytes:
+    async def get_camera_snapshot(self, camera_id: str, width: int | None) -> bytes:
         self.calls.append(("snapshot", (camera_id, width)))
         return b"jpeg"
 
@@ -106,6 +106,10 @@ def test_names_and_cameras(wrapped: UiProtect) -> None:
 
 def test_snapshot_and_close(wrapped: UiProtect) -> None:
     assert asyncio.run(wrapped.snapshot("c1", 640)) == b"jpeg"
-    assert client(wrapped).calls == [("snapshot", ("c1", 640))]
+    assert asyncio.run(wrapped.snapshot("c1")) == b"jpeg"
+    assert client(wrapped).calls == [
+        ("snapshot", ("c1", 640)),
+        ("snapshot", ("c1", None)),
+    ]
     asyncio.run(wrapped.close())
     assert client(wrapped).closed
