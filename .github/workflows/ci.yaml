@@ -2,12 +2,14 @@ name: CI
 
 # Always runs, so the required "CI passed" check always reports (a
 # path-filtered workflow that doesn't run blocks the PR forever). Docs-only
-# changes skip the tests and image build instead.
+# changes skip the tests and image build instead. The release workflow
+# calls it too, before publishing.
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read

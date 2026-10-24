@@ -11,7 +11,7 @@
 #   validity checks, Dependabot alerts (Renovate reads them), private
 #   vulnerability reporting, and CodeQL default setup.
 # - Workflow tokens are read-only unless a job asks for more, and workflows
-#   may open PRs (the release workflow does).
+#   can't approve PRs.
 # - Merged branches are deleted.
 #
 # Some security features need GitHub Advanced Security on private repos;
@@ -66,9 +66,9 @@ try "Dependabot alerts" gh api -X PUT "repos/$repo/vulnerability-alerts"
 try "private vulnerability reporting" gh api -X PUT "repos/$repo/private-vulnerability-reporting"
 try "CodeQL default setup" gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured
 
-try "read-only workflow tokens; workflows may open PRs" \
+try "read-only workflow tokens; workflows can't approve PRs" \
   gh api -X PUT "repos/$repo/actions/permissions/workflow" \
-  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true
+  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false
 
 # 15368 is the GitHub Actions app, so only Actions can satisfy the checks.
 ruleset=$(cat <<'EOF'
