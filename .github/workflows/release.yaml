@@ -1,15 +1,11 @@
 name: Release
 
-# main is protected, so releases go through a PR (see docs/releasing.md in
-# python-ai-rules):
-# 1. Actions tab -> Release -> Run workflow, choosing patch, minor or major.
-#    The prepare job bumps the version on a release/vX.Y.Z branch, opens a
-#    "Release vX.Y.Z" PR, and approves the PR's CI and Lint runs (GitHub
-#    holds runs on PRs opened by a workflow until they're approved).
-# 2. Merge the PR once checks pass. The tag job tags the merge commit and
-#    the release job pushes the production image to ghcr.io and creates
-#    the GitHub Release.
-# Pushing a vX.Y.Z tag yourself also works.
+# Actions tab -> Release -> Run workflow on main, choosing patch, minor or
+# major. It runs CI, then works out the next version from the latest vX.Y.Z
+# tag, pushes the production image to ghcr.io, publishes to PyPI (if
+# enabled), tags main's commit and creates the GitHub Release. Nothing is
+# committed: the version lives in the tags, and is stamped into
+# pyproject.toml only for the build.
 on:
   workflow_dispatch:
     inputs:
@@ -18,218 +14,129 @@ on:
         type: choice
         options: [patch, minor, major]
         default: patch
-  pull_request:
-    types: [closed]
-    branches: [main]
-  push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+      dry_run:
+        description: Preview only (no image push, PyPI, tag, or GitHub Release)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
-# One group per version: the run for a merged release/vX.Y.Z PR and any run
-# for the vX.Y.Z tag share it, so they can't publish the same release at
-# once. The button's runs and unrelated PR closes get groups of their own.
 concurrency:
-  group: >-
-    release-${{ github.event_name == 'push' && format('release/{0}', github.ref_name)
-    || github.event.pull_request.head.ref || github.ref }}
+  group: release
   cancel-in-progress: false
 
-env:
-  ESPHOME_VERSION: ${{ vars.ESPHOME_VERSION }}
-
 jobs:
-  prepare:
-    name: Open release PR
-    if: github.event_name == 'workflow_dispatch'
+  guard:
+    name: Only release from main
     runs-on: ubuntu-latest
-    timeout-minutes: 40  # includes waiting up to 30 minutes for CI
-    permissions:
-      contents: write
-      pull-requests: write
-      actions: write
+    timeout-minutes: 5
     steps:
-      - name: Only release from main
-        if: github.ref != 'refs/heads/main'
+      - if: github.ref != 'refs/heads/main'
         run: |
           echo "::error::Run the release from main, not $GITHUB_REF_NAME"
           exit 1
 
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0  # all tags, to find the latest version
-
-      # Merging a PR starts CI on main, so a release right after a merge
-      # waits for that CI rather than failing.
-      - name: Wait for CI to pass on this commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          state() { gh run list --workflow ci.yaml --limit 1 --json status,conclusion \
-            --jq '.[] | "\(.status) \(.conclusion)"' "$@"; }
-          for i in $(seq 1 90); do  # up to 30 minutes
-            run=$(state --commit "$GITHUB_SHA")
-            case "$run" in "completed "*) break ;; esac
-            # No CI run for this commit after 2 minutes: it didn't run CI.
-            if [ -z "$run" ] && [ "$i" -ge 6 ]; then break; fi
-            if [ "$i" = 1 ]; then echo "Waiting for CI on $GITHUB_SHA to finish..."; fi
-            sleep 20
-          done
-          [ -n "$run" ] || run=$(state --branch main --status completed)
-          if [ "$run" != "completed success" ]; then
-            echo "::error::CI for this commit is '${run:-missing}', not success"
-            exit 1
-          fi
-
-      # bump-version.sh sets the version with `uv version`.
-      - uses: astral-sh/setup-uv@v10.3.0
-
-      - name: Bump version on a release branch and open a PR
-        id: pr
-        env:
-          BUMP: ${{ inputs.bump }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          version=$(scripts/bump-version.sh "$BUMP")
-          branch="release/v$version"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$branch"
-          git commit -am "Release v$version"
-          git push origin "$branch"
-          {
-            echo "Merge to tag and publish **v$version**. Release notes:"
-            echo
-            scripts/changelog-section.sh "$version"
-          } > "$RUNNER_TEMP/body.md"
-          url=$(gh pr create --base main --head "$branch" --title "Release v$version" \
-            --body-file "$RUNNER_TEMP/body.md")
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-
-      # GitHub holds the CI and Lint runs of a PR opened by GITHUB_TOKEN until
-      # someone approves them; the required checks only count those runs.
-      - name: Approve the release PR's CI and Lint runs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.pr.outputs.url }}
-        run: |
-          sha=$(git rev-parse HEAD)
-          held() { gh run list --commit "$sha" --event pull_request --status action_required \
-            --json databaseId,workflowName --jq "$1"; }
-          for _ in $(seq 1 24); do
-            [ "$(held 'length')" -ge 2 ] && break
-            sleep 5
-          done
-          ids=$(held '.[].databaseId')
-          approved=true
-          for id in $ids; do
-            gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/approve" >/dev/null || approved=false
-          done
-          if [ -z "$ids" ] || [ "$approved" != true ]; then
-            echo "::warning::Open $URL and click 'Approve and run workflows' to start CI and Lint"
-          else
-            echo "::notice::Opened $URL; merge it once CI and Lint pass"
-          fi
-
-  tag:
-    name: Tag release
-    if: >-
-      github.event_name == 'pull_request' && github.event.pull_request.merged
-      && startsWith(github.event.pull_request.head.ref, 'release/v')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
-      - id: tag
-        env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          tag="${HEAD_REF#release/}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" -m "$tag"
-          git push origin "$tag"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+  ci:
+    name: CI
+    needs: guard
+    uses: ./.github/workflows/ci.yaml
 
   release:
     name: Image and GitHub Release
-    needs: tag
-    # After the tag job, or on its own for a tag pushed by hand. Tags the tag
-    # job pushed are skipped here: that run already publishes them.
-    if: >-
-      !cancelled() && (needs.tag.result == 'success'
-      || (needs.tag.result == 'skipped' && github.event_name == 'push'
-      && github.actor != 'github-actions[bot]'))
+    needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: write
       packages: write
       id-token: write  # PyPI trusted publishing
-    env:
-      TAG: ${{ needs.tag.outputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.TAG }}
+          fetch-depth: 0  # all tags, to find the latest version
 
-      # Idempotent: a second run for the same tag (e.g. if the tag job ever
-      # pushes with a token that triggers workflows) succeeds without
-      # republishing.
-      - name: Skip if already released
-        id: exists
+      # A latest tag with no GitHub Release is a release that failed after
+      # tagging. Finish it rather than bump past it, if it's on this commit.
+      - name: Compute release version
+        id: version
         env:
+          BUMP: ${{ inputs.bump }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::notice::$TAG is already released; nothing to do"
-            echo "exists=true" >> "$GITHUB_OUTPUT"
+          latest=$(git tag --list 'v*' --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+          if [ -n "$latest" ] && ! gh release view "$latest" >/dev/null 2>&1; then
+            if [ "$(git rev-list -n 1 "$latest")" != "$GITHUB_SHA" ]; then
+              echo "::error::$latest has no GitHub Release and isn't on this commit;" \
+                "finish or delete it first"
+              exit 1
+            fi
+            version=${latest#v}
+            echo "Finishing $latest, which has no GitHub Release yet"
+          else
+            latest=${latest:-v0.0.0}
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            case "$BUMP" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
+            esac
+            version="$major.$minor.$patch"
+            if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+              echo "::error::Tag v$version already exists"
+              exit 1
+            fi
+            echo "Releasing v$version (latest was $latest)"
           fi
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Check changelog and project version
-        id: check
-        if: steps.exists.outputs.exists != 'true'
+      # The package and image report this version; it isn't committed.
+      - uses: astral-sh/setup-uv@v10.3.0
+      - name: Stamp the version
+        id: project
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          version="${TAG#v}"
-          scripts/changelog-section.sh "$version" > "$RUNNER_TEMP/notes.md"
-          project() { python3 -c \
-            "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['$1'])"; }
-          if [ "$(project version)" != "$version" ]; then
-            echo "::error::pyproject.toml version is $(project version), tag is $TAG"
-            exit 1
-          fi
-          echo "name=$(project name)" >> "$GITHUB_OUTPUT"
-          image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          printf '\n**Image:** %s\n' "\`$image:$version\`" >> "$RUNNER_TEMP/notes.md"
-          echo "image=$image" >> "$GITHUB_OUTPUT"
+          uv version --no-sync "$VERSION"
+          python3 -c \
+            "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['name'])" \
+            | sed 's/^/name=/' >> "$GITHUB_OUTPUT"
 
-      # X.Y.Z, X.Y, X (from 1.0.0 on) and latest; a pre-release (vX.Y.Z-rc.1)
-      # gets only its own tag.
+      # X.Y.Z, X.Y, X (from 1.0.0 on) and latest.
       - name: Image tags
         id: meta
-        if: steps.exists.outputs.exists != 'true'
         uses: docker/metadata-action@v6
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          MAJOR: ${{ !startsWith(steps.version.outputs.tag, 'v0.') }}
         with:
-          images: ${{ steps.check.outputs.image }}
+          images: ${{ steps.version.outputs.image }}
           flavor: latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ env.TAG }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
-            type=semver,pattern={{major}},value=${{ env.TAG }},enable=${{ !startsWith(env.TAG, 'v0.') }}
-            type=raw,value=latest,enable=${{ !contains(env.TAG, '-') }}
+            type=semver,pattern={{major}},value=${{ env.TAG }},enable=${{ env.MAJOR }}
+            type=raw,value=latest
 
-      - if: steps.exists.outputs.exists != 'true'
+      - name: Dry run summary
+        if: inputs.dry_run
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          echo "Dry run; would publish $TAG with images:"
+          echo "$TAGS"
+
+      - if: ${{ !inputs.dry_run }}
         uses: docker/setup-qemu-action@v4
-      - if: steps.exists.outputs.exists != 'true'
+      - if: ${{ !inputs.dry_run }}
         uses: docker/setup-buildx-action@v4
-      - if: steps.exists.outputs.exists != 'true'
+      - if: ${{ !inputs.dry_run }}
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -237,7 +144,7 @@ jobs:
           password: ${{ github.token }}
 
       - name: Build and push the production image
-        if: steps.exists.outputs.exists != 'true'
+        if: ${{ !inputs.dry_run }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -247,42 +154,60 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          # The image is pushed before the cache is saved, and the two
-          # platforms' builds can clash saving the same layer ("failed to
-          # reserve cache"). A cache that isn't saved only slows the next
-          # build; it mustn't fail the release.
+          # The two platforms' builds can clash saving the same layer
+          # ("failed to reserve cache"). A cache that isn't saved only slows
+          # the next build; it mustn't fail the release.
           cache-to: type=gha,mode=max,ignore-error=true
           provenance: mode=max
           sbom: true
 
-      - if: steps.exists.outputs.exists != 'true'
-        uses: astral-sh/setup-uv@v10.3.0
       - name: Build the package
-        if: steps.exists.outputs.exists != 'true'
         run: uv build
 
       # Optional: set the repository variable PYPI_PUBLISH to true. Uses
       # PyPI trusted publishing (no secret) unless the PYPI_API_TOKEN
       # secret is set. Files already on PyPI are skipped, so a re-run works.
       - name: Publish to PyPI
-        if: steps.exists.outputs.exists != 'true' && vars.PYPI_PUBLISH == 'true'
+        if: ${{ !inputs.dry_run && vars.PYPI_PUBLISH == 'true' }}
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-          NAME: ${{ steps.check.outputs.name }}
         run: |
           [ -n "$UV_PUBLISH_TOKEN" ] || unset UV_PUBLISH_TOKEN
           uv publish --check-url https://pypi.org/simple/
-          printf '\n**PyPI:** https://pypi.org/project/%s/%s/\n' "$NAME" "${TAG#v}" \
-            >> "$RUNNER_TEMP/notes.md"
 
+      # Tags the commit the release was built from; the stamped
+      # pyproject.toml stays in the runner.
+      - name: Tag the release commit
+        if: ${{ !inputs.dry_run }}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # Already there when finishing a release that failed after tagging.
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG" "$GITHUB_SHA"
+          git push origin "$TAG"
+
+      # The sdist and wheel go on every release, so pip can install from it
+      # whether or not the project is on PyPI.
       - name: Create GitHub Release
-        if: steps.exists.outputs.exists != 'true'
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE: ${{ steps.version.outputs.image }}
+          NAME: ${{ steps.project.outputs.name }}
+          PYPI_PUBLISH: ${{ vars.PYPI_PUBLISH }}
         run: |
-          prerelease=""
-          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
-          # The sdist and wheel go on every release, so pip can install
-          # from it whether or not the project is on PyPI.
-          gh release create "$TAG" --verify-tag --title "$TAG" \
-            --notes-file "$RUNNER_TEMP/notes.md" $prerelease dist/*
+          {
+            printf '**Image:** %s\n' "\`$IMAGE:$VERSION\`"
+            if [ "$PYPI_PUBLISH" = true ]; then
+              printf '\n**PyPI:** https://pypi.org/project/%s/%s/\n' "$NAME" "$VERSION"
+            fi
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes \
+            --notes-file "$RUNNER_TEMP/notes.md" dist/*

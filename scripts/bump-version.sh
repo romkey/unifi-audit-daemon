@@ -10,8 +10,9 @@
 #   scripts/bump-version.sh minor    # 1.4.2 -> 1.5.0
 #   scripts/bump-version.sh major    # 1.4.2 -> 2.0.0
 #
-# Run from the repo root. Used by the release workflow's "Run workflow"
-# button and by the /python-rules:release skill.
+# Run from the repo root. Used by the /python-rules:release skill. The
+# release workflow doesn't use it: it takes the version from the tags and
+# commits nothing.
 set -eu
 bump=${1:-patch}
 changelog=${CHANGELOG:-CHANGELOG.md}
