@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-29
+
+### Changed
+
+- Updated dependencies: uiprotect 25 (from 23.9), and the latest
+  patch releases of the dev tools, uv, pre-commit hooks and GitHub
+  Actions. Renovate keeps them current from here.
+- User names in the audit log now come from Protect's raw bootstrap,
+  since uiprotect 24 dropped `User.name` from its model.
+
+## [0.2.2] - 2026-10-24
+
 ### Added
 
 - Every contact sheet now also keeps each camera's full-resolution

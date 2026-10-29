@@ -96,7 +96,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # The package and image report this version; it isn't committed.
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.3
       - name: Stamp the version
         id: project
         env:
