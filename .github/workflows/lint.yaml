@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # gitleaks scans the whole history
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -35,7 +35,7 @@ jobs:
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
-      - run: uvx pre-commit@4.6.2 run --all-files --show-diff-on-failure --color=always
+      - run: uvx pre-commit@4.7.0 run --all-files --show-diff-on-failure --color=always
       # pre-commit's gitleaks hook only sees staged changes; scan every commit.
       - name: Scan git history for secrets
         run: |

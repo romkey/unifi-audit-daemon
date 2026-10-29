@@ -26,7 +26,6 @@ class Device:
 @dataclass
 class Bootstrap:
     cameras: dict[str, Device]
-    users: dict[str, Device]
 
 
 @dataclass
@@ -47,12 +46,22 @@ class FakeClient:
                 "c1": Device("c1", "Back", is_connected=False),
                 "c3": Device("c3", "Elsewhere", is_adopted=False),
             },
-            users={"u1": Device("u1", "Alice")},
         )
 
     async def get_camera_snapshot(self, camera_id: str, width: int | None) -> bytes:
         self.calls.append(("snapshot", (camera_id, width)))
         return b"jpeg"
+
+    async def api_request_obj(self, url: str) -> dict[str, Any]:
+        assert url == "bootstrap"
+        return {
+            "cameras": [
+                {"id": "c2", "name": "front"},
+                {"id": "c1", "name": "Back"},
+                {"id": "c3", "name": None},
+            ],
+            "users": [{"id": "u1", "name": "Alice"}, {"id": "u2"}, {"name": "?"}],
+        }
 
     async def close_session(self) -> None:
         self.closed = True
@@ -95,8 +104,8 @@ def test_events(wrapped: UiProtect) -> None:
 
 def test_names_and_cameras(wrapped: UiProtect) -> None:
     assert asyncio.run(wrapped.names()) == Names(
-        cameras={"c2": "front", "c1": "Back", "c3": "Elsewhere"},
-        users={"u1": "Alice"},
+        cameras={"c2": "front", "c1": "Back", "c3": "c3"},
+        users={"u1": "Alice", "u2": "u2"},
     )
     assert asyncio.run(wrapped.cameras()) == [
         Camera("c1", "Back", connected=False),
@@ -113,3 +122,7 @@ def test_snapshot_and_close(wrapped: UiProtect) -> None:
     ]
     asyncio.run(wrapped.close())
     assert client(wrapped).closed
+
+
+def test_names_tolerates_a_missing_list() -> None:
+    assert protect._names(None) == {}

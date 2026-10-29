@@ -98,10 +98,11 @@ class UiProtect:
         )
 
     async def names(self) -> Names:
-        bootstrap = await self._client.get_bootstrap()
+        # Raw, because uiprotect's models no longer carry user names.
+        bootstrap = await self._client.api_request_obj("bootstrap")
         return Names(
-            cameras={c.id: c.name or c.id for c in bootstrap.cameras.values()},
-            users={u.id: u.name for u in bootstrap.users.values()},
+            cameras=_names(bootstrap.get("cameras")),
+            users=_names(bootstrap.get("users")),
         )
 
     async def cameras(self) -> list[Camera]:
@@ -120,3 +121,14 @@ class UiProtect:
 
     async def close(self) -> None:
         await self._client.close_session()
+
+
+def _names(objs: object) -> dict[str, str]:
+    """Id to display name for a raw bootstrap list, falling back to the id."""
+    if not isinstance(objs, list):
+        return {}
+    return {
+        o["id"]: o.get("name") or o["id"]
+        for o in objs
+        if isinstance(o, dict) and isinstance(o.get("id"), str)
+    }

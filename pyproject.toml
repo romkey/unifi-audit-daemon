@@ -14,7 +14,7 @@ classifiers = [
 ]
 dependencies = [
   "pillow>=13.0.0",
-  "uiprotect>=23.9.0",
+  "uiprotect>=25.0.0",
 ]
 
 [project.urls]
@@ -27,13 +27,13 @@ unifi-audit-daemon = "unifi_audit_daemon.__main__:main"
 
 [dependency-groups]
 dev = [
-  "mypy>=2.4.0",
-  "pytest>=9.1.1",
+  "mypy>=2.4.1",
+  "pytest>=9.2.0",
   "pytest-cov>=7.1.0",
 ]
 
 [build-system]
-requires = ["uv_build>=0.13.4,<0.14.0"]
+requires = ["uv_build>=0.13.6,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.ruff.lint]
