@@ -11,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from unifi_audit_daemon.metrics import Metrics
 from unifi_audit_daemon.protect import Names, ProtectSource, RawEvent
 from unifi_audit_daemon.store import AuditStore, Record, SyncState
 
@@ -84,6 +85,7 @@ class Syncer:
         backfill: timedelta,
         event_types: tuple[str, ...] = (),
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        metrics: Metrics | None = None,
     ) -> None:
         self.source = source
         self.store = store
@@ -92,6 +94,7 @@ class Syncer:
         self.event_types = event_types
         self.clock = clock
         self.status = SyncStatus()
+        self.metrics = metrics or Metrics()
 
     async def sync_once(self) -> int:
         """Read new events from Protect and store them; returns how many."""
@@ -100,11 +103,13 @@ class Syncer:
         start = cursor - self.overlap
         seen = self.store.known_ids(start)
         names = await self.source.names()
+        self._count_protect(names)
         added = 0
 
         while start < now:
             end = min(start + CHUNK, now)
             events = await self.source.events(start, end, self.event_types)
+            self.metrics.events_fetched.inc(len(events))
             records = []
             for event in sorted(events, key=lambda e: int(e["start"])):
                 if event["id"] in seen:
@@ -115,11 +120,23 @@ class Syncer:
             # Save progress chunk by chunk, so a long backfill that fails
             # part way resumes where it stopped.
             self.store.save_state(SyncState(cursor=end))
+            for record in records:
+                self.metrics.events_stored.inc(type=str(record["type"]))
             added += len(records)
             start = end
 
         self.status.last_success = now
         self.status.last_added = added
+        self.metrics.sync_last_added.set(added)
         if added:
             logger.info("stored %d new events", added)
         return added
+
+    def _count_protect(self, names: Names) -> None:
+        self.metrics.protect_users.set(len(names.users))
+        self.metrics.protect_cameras.set(len(names.cameras))
+        self.metrics.protect_info.only(
+            1,
+            name=names.console or "",
+            version=names.console_version or "",
+        )

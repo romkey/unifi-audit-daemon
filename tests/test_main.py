@@ -113,6 +113,13 @@ def test_run_serves_until_sigterm(
         ]
         assert json.dumps(status)
 
+        # The collectors fill in what's on disk at scrape time.
+        text = apis[0].metrics.render()
+        assert "unifi_audit_audit_log_files 0\n" in text  # no events yet
+        assert "unifi_audit_contact_sheets 1\n" in text
+        assert "unifi_audit_sync_cursor_timestamp_seconds " in text
+        assert apis[0].metrics.contact_sheet_bytes.get()
+
         os.kill(os.getpid(), signal.SIGTERM)
         return await asyncio.wait_for(running, 5)
 

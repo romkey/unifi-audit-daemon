@@ -33,6 +33,9 @@ a window; ids dedupe it); clients should dedupe by `id` too.
   copied into `CONTACT_SHEET_DIR/assets/` at startup.
 - `daemon.py`: sync and contact-sheet loops; `next_run` scheduling.
 - `server.py`: HTTP API (docs/api.md).
+- `metrics.py`: `Metrics`, the Prometheus metrics behind `GET /metrics`
+  (docs/metrics.md); the jobs and server update it, collectors fill in
+  disk use at scrape time.
 - `contrib/member-zone/`: stdlib program Member Zone runs as an audit source.
 - `tests/`: pytest; `tests/fakes.py` is an in-memory Protect.
 - `Dockerfile`: `dev` and `production` stages; `/data` (private) and
@@ -44,7 +47,8 @@ a window; ids dedupe it); clients should dedupe by `id` too.
 - Everything outside `protect.py` uses `ProtectSource`, never uiprotect.
 - Audit records are never rewritten or deleted.
 - The audit log and the contact sheets never share a directory or a token:
-  sheets may be shared, the log must not be.
+  sheets may be shared, the log must not be. `METRICS_TOKEN` reads only
+  `/metrics`, which carries counts and sizes, never records.
 - Rules: https://github.com/romkey/python-ai-rules/blob/main/RULES.md
 
 ## Planned

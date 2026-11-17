@@ -35,10 +35,12 @@ class Camera:
 
 @dataclass(frozen=True)
 class Names:
-    """Display names for ids that appear in events."""
+    """Display names for ids that appear in events, and the console's own."""
 
     cameras: Mapping[str, str] = field(default_factory=dict)
     users: Mapping[str, str] = field(default_factory=dict)
+    console: str | None = None
+    console_version: str | None = None
 
 
 class ProtectSource(Protocol):
@@ -100,9 +102,13 @@ class UiProtect:
     async def names(self) -> Names:
         # Raw, because uiprotect's models no longer carry user names.
         bootstrap = await self._client.api_request_obj("bootstrap")
+        nvr = bootstrap.get("nvr")
+        nvr = nvr if isinstance(nvr, dict) else {}
         return Names(
             cameras=_names(bootstrap.get("cameras")),
             users=_names(bootstrap.get("users")),
+            console=_text(nvr.get("name")),
+            console_version=_text(nvr.get("version")),
         )
 
     async def cameras(self) -> list[Camera]:
@@ -121,6 +127,10 @@ class UiProtect:
 
     async def close(self) -> None:
         await self._client.close_session()
+
+
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _names(objs: object) -> dict[str, str]:

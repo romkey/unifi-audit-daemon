@@ -17,6 +17,7 @@ from the audit log in DATA_DIR.
 """
 
 import asyncio
+import contextlib
 import io
 import json
 import logging
@@ -41,6 +42,7 @@ from unifi_audit_daemon.contact_sheet_index import (
     Sheet,
     render_index,
 )
+from unifi_audit_daemon.metrics import Metrics
 from unifi_audit_daemon.protect import ProtectSource
 
 logger = logging.getLogger(__name__)
@@ -252,6 +254,16 @@ class ContactSheets:
             if SHEET_NAME.match(name := p.name.removesuffix(".jpg"))
         }
 
+    def disk_usage(self) -> int:
+        """Bytes in the directory: sheets, snapshots, page and assets."""
+        total = 0
+        for path in self.directory.rglob("*"):
+            # A retake or prune may remove a file while we look.
+            with contextlib.suppress(FileNotFoundError):
+                if path.is_file():
+                    total += path.stat().st_size
+        return total
+
     def write_index(self) -> None:
         """Rewrite index.html to list the sheets now in the directory."""
         page = render_index([Sheet(day, self.pictures(day)) for day in self.dates()])
@@ -287,6 +299,20 @@ def _picture(folder: str, camera: Any) -> Picture:  # Any: from cameras.json
     return Picture(name, note=str(camera.get("note") or "no image"))
 
 
+def _count_snapshots(metrics: Metrics, tiles: Sequence[Tile]) -> None:
+    counts = {"ok": 0, "offline": 0, "failed": 0}
+    for tile in tiles:
+        if tile.image is not None:
+            counts["ok"] += 1
+        elif tile.note == "offline":
+            counts["offline"] += 1
+        else:
+            counts["failed"] += 1
+    for result, count in counts.items():
+        metrics.snapshots.inc(count, result=result)
+        metrics.sheet_cameras.set(count, result=result)
+
+
 def _slug(name: str) -> str:
     """A file-name-safe form of a camera's name: "Front Door" -> "front-door"."""
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "camera"
@@ -307,6 +333,7 @@ async def make_contact_sheet(
     tile_width: int,
     columns: int,
     keep_days: int,
+    metrics: Metrics | None = None,
 ) -> Path:
     """Snapshot every camera, save the sheet, and prune old ones."""
     cameras = await source.cameras()
@@ -324,6 +351,8 @@ async def make_contact_sheet(
                 return Tile(name, None)
 
     tiles = await asyncio.gather(*(grab(c.id, c.name, c.connected) for c in cameras))
+    if metrics is not None:
+        _count_snapshots(metrics, tiles)
     title = f"{taken_at:%A %Y-%m-%d %H:%M %Z}  ·  {len(cameras) or 'no'} cameras"
     jpeg = await asyncio.to_thread(
         compose, tiles, title=title, tile_width=tile_width, columns=columns

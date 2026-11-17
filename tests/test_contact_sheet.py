@@ -22,6 +22,7 @@ from unifi_audit_daemon.contact_sheet import (
     thumbnail,
 )
 from unifi_audit_daemon.contact_sheet_index import Picture
+from unifi_audit_daemon.metrics import Metrics
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 
@@ -253,10 +254,17 @@ def test_make_contact_sheet(tmp_path: Path, caplog: pytest.LogCaptureFixture) ->
     sheets.save(date(2026, 9, 1), b"old")
     taken_at = datetime(2026, 10, 20, 3, 0, tzinfo=PACIFIC)
 
+    metrics = Metrics()
     with caplog.at_level(logging.INFO):
         path = asyncio.run(
             make_contact_sheet(
-                source, sheets, taken_at, tile_width=160, columns=0, keep_days=30
+                source,
+                sheets,
+                taken_at,
+                tile_width=160,
+                columns=0,
+                keep_days=30,
+                metrics=metrics,
             )
         )
 
@@ -276,6 +284,12 @@ def test_make_contact_sheet(tmp_path: Path, caplog: pytest.LogCaptureFixture) ->
     ]
     assert (sheets.directory / "2026-10-20" / "01-front.jpg").read_bytes() == (
         source.images["cam1"]
+    )
+    for result in ("ok", "failed", "offline"):
+        assert metrics.snapshots.get(result=result) == 1
+        assert metrics.sheet_cameras.get(result=result) == 1
+    assert sheets.disk_usage() == sum(
+        p.stat().st_size for p in sheets.directory.rglob("*") if p.is_file()
     )
 
 

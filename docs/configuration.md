@@ -41,6 +41,7 @@ value stops the app with a message naming the variable.
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `API_TOKEN` | required | Bearer token every `/api/` request must send; at least 16 characters |
+| `METRICS_TOKEN` | none | A bearer token that can only read `GET /metrics`, for Prometheus ([metrics](metrics.md)). Without it `/metrics` takes `API_TOKEN`. At least 16 characters; must differ from `API_TOKEN` and `CONTACT_SHEET_TOKEN`. |
 | `HOST` | `127.0.0.1` (`0.0.0.0` in the image) | Address to listen on |
 | `PORT` | `8000` | Port to listen on |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` |

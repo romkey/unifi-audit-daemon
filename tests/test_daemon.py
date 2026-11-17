@@ -96,6 +96,14 @@ def test_runs_syncs_and_takes_a_requested_sheet(tmp_path: Path) -> None:
     assert daemon.next_contact_sheet is not None
     assert daemon.last_contact_sheet_error is None
     assert daemon.syncer.status.last_error is None
+    metrics = daemon.metrics
+    assert metrics.job_runs.get(job="sync", trigger="scheduled", result="success") == 1
+    assert metrics.job_last_success.get(job="sync") is not None
+    assert metrics.job_duration.count(job="sync") == 1
+    assert metrics.job_next_run.get(job="sync") is not None
+    assert metrics.job_next_run.get(job="contact_sheet") == (
+        daemon.next_contact_sheet.timestamp()
+    )
 
 
 def test_failures_are_recorded_and_retried(
@@ -127,6 +135,17 @@ def test_failures_are_recorded_and_retried(
     assert daemon.syncer.status.last_error == "console unreachable"
     assert daemon.syncer.status.last_error_at is not None
     assert daemon.last_contact_sheet_error == "TimeoutError"
+    metrics = daemon.metrics
+    assert metrics.job_runs.get(job="sync", trigger="scheduled", result="failure") >= 1
+    assert metrics.job_errors.get(job="sync", error="NvrError") >= 1
+    assert metrics.job_errors.get(job="contact_sheet", error="TimeoutError") == 1
+    assert (
+        metrics.job_runs.get(job="contact_sheet", trigger="manual", result="failure")
+        == 1
+    )
+    assert metrics.job_last_failure.get(job="sync") is not None
+    assert metrics.job_last_success.get(job="sync") is None
+    assert metrics.job_running.get(job="sync") == 0
 
 
 def test_takes_the_sheet_when_its_time_comes(

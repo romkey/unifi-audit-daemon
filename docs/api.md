@@ -4,12 +4,20 @@ Every path under `/api/` needs `Authorization: Bearer <API_TOKEN>`;
 without it the answer is `401 {"error": "unauthorized"}`. The contact-sheet
 GETs also accept `CONTACT_SHEET_TOKEN`, if it's set. That token reads
 nothing else: not the audit log, not the status, and it can't take a
-sheet.
+sheet. `/metrics` takes `API_TOKEN` or `METRICS_TOKEN`, which likewise
+reads nothing else.
 
 ## `GET /healthz`
 
 No token. `200 {"status": "ok", "version": "X.Y.Z"}` while the process is
 up. Says nothing about Protect; see `/api/v1/status` for that.
+
+## `GET /metrics`
+
+`METRICS_TOKEN` (if set) or `API_TOKEN`. Prometheus metrics in the text
+format: jobs, failures, durations, events stored by type, Protect's users
+and cameras, disk use, HTTP requests. [metrics.md](metrics.md) lists them.
+`METRICS_TOKEN` reads nothing else.
 
 ## `GET /api/v1/status`
 

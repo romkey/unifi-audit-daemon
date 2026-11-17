@@ -1,5 +1,7 @@
 import json
+import socket
 import threading
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
@@ -12,11 +14,13 @@ import pytest
 
 from unifi_audit_daemon import __version__
 from unifi_audit_daemon.contact_sheet import ContactSheets
-from unifi_audit_daemon.server import Api, make_server
+from unifi_audit_daemon.metrics import Metrics
+from unifi_audit_daemon.server import Api, make_server, route
 from unifi_audit_daemon.store import AuditStore
 
 TOKEN = "t" * 16
 SHEET_TOKEN = "s" * 16
+METRICS_TOKEN = "m" * 16
 T0 = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
 
@@ -27,6 +31,7 @@ class Fixture:
     sheets: ContactSheets
     requests: list[bool] = field(default_factory=list)
     running: bool = True
+    metrics: Metrics = field(default_factory=Metrics)
 
 
 @pytest.fixture
@@ -46,6 +51,8 @@ def app(tmp_path: Path) -> Iterator[Fixture]:
         status=lambda: {"sync": {"last_error": None}},
         request_contact_sheet=request_contact_sheet,
         contact_sheet_token=SHEET_TOKEN,
+        metrics_token=METRICS_TOKEN,
+        metrics=fixture.metrics,
     )
     server = make_server("127.0.0.1", 0, api)
     thread = threading.Thread(target=server.serve_forever)
@@ -180,3 +187,86 @@ def test_contact_sheet_token_reads_sheets_only(app: Fixture) -> None:
 
 def test_api_token_still_reads_sheets(app: Fixture) -> None:
     assert call_json(f"{app.url}/api/v1/contact-sheets") == (200, {"dates": []})
+
+
+def test_metrics_with_either_token(app: Fixture) -> None:
+    for token in (METRICS_TOKEN, TOKEN):
+        status, kind, body = call(f"{app.url}/metrics", token=token)
+        assert (status, kind) == (200, "text/plain; version=0.0.4; charset=utf-8")
+        assert b"# TYPE unifi_audit_job_runs_total counter" in body
+
+
+@pytest.mark.parametrize("token", [None, SHEET_TOKEN, "wrong-token-value"])
+def test_metrics_needs_its_token(app: Fixture, token: str | None) -> None:
+    assert call_json(f"{app.url}/metrics", token=token) == (
+        401,
+        {"error": "unauthorized"},
+    )
+
+
+def test_metrics_token_reads_metrics_only(app: Fixture) -> None:
+    app.sheets.save(date(2026, 10, 20), b"jpeg")
+    for path in (
+        "/api/v1/events",
+        "/api/v1/status",
+        "/api/v1/contact-sheets",
+        "/api/v1/contact-sheets/latest.jpg",
+    ):
+        assert call(f"{app.url}{path}", token=METRICS_TOKEN)[0] == 401
+    status, _ = call_json(
+        f"{app.url}/api/v1/contact-sheets", token=METRICS_TOKEN, method="POST"
+    )
+    assert status == 401
+    assert app.requests == []
+
+
+def test_requests_are_counted_by_route(app: Fixture) -> None:
+    call(f"{app.url}/healthz", token=None)
+    call(f"{app.url}/api/v1/status", token=None)
+    call(f"{app.url}/api/v1/contact-sheets/2026-10-20.jpg")
+    call(f"{app.url}/api/v1/contact-sheets/2026-10-21.jpg")
+    call(f"{app.url}/no/such/thing")
+    call(f"{app.url}/api/v1/contact-sheets", method="POST")
+
+    requests = app.metrics.http_requests
+    assert requests.get(method="GET", route="/healthz", status="200") == 1
+    assert requests.get(method="GET", route="/api/v1/status", status="401") == 1
+    sheet = "/api/v1/contact-sheets/{sheet}.jpg"
+    assert requests.get(method="GET", route=sheet, status="404") == 2
+    assert requests.get(method="GET", route="other", status="404") == 1
+    assert (
+        requests.get(method="POST", route="/api/v1/contact-sheets", status="202") == 1
+    )
+    assert app.metrics.contact_sheet_requests.get() == 1
+    assert app.metrics.http_duration.count(route=sheet) == 2
+
+    _, _, body = call(f"{app.url}/metrics", token=METRICS_TOKEN)
+    text = body.decode()
+    assert (
+        'unifi_audit_http_requests_total{method="GET",route="/healthz",status="200"} 1'
+        in text
+    )
+    assert "2026-10-20" not in text  # one route per endpoint, not per URL
+
+
+def test_unparseable_requests_are_counted(app: Fixture) -> None:
+    host, port = app.url.removeprefix("http://").split(":")
+    with socket.create_connection((host, int(port)), timeout=5) as conn:
+        conn.sendall(b"NONSENSE\r\n\r\n")
+        assert conn.recv(100).startswith(b"HTTP/1.0 400")
+    with socket.create_connection((host, int(port)), timeout=5):
+        pass  # connects and sends nothing: not a request
+    # Counted once the handler thread finishes, just after it answers.
+    deadline = time.monotonic() + 5
+    counted = app.metrics.http_requests.get
+    while not counted(method="other", route="other", status="400"):
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+
+
+def test_route() -> None:
+    assert route("/metrics") == "/metrics"
+    assert route("/api/v1/contact-sheets/latest.jpg") == (
+        "/api/v1/contact-sheets/{sheet}.jpg"
+    )
+    assert route("/api/v1/contact-sheets/x.jpg") == "other"

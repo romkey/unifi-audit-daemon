@@ -92,6 +92,11 @@ class AuditStore:
             if parse_time(record["start"]) >= started_since
         }
 
+    def disk_usage(self) -> tuple[int, int]:
+        """(files, bytes) of the log, from file sizes alone."""
+        sizes = [p.stat().st_size for p in self.directory.glob("*.jsonl")]
+        return len(sizes), sum(sizes)
+
     def _file(self, day: str) -> Path:
         return self.directory / f"{day}.jsonl"
 
