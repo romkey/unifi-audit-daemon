@@ -32,9 +32,10 @@ shared without exposing the audit log.
 | `src/unifi_audit_daemon/contact_sheet.py` | Builds and keeps the nightly contact sheets |
 | `src/unifi_audit_daemon/daemon.py` | The sync and contact-sheet loops and their schedule |
 | `src/unifi_audit_daemon/server.py` | The HTTP API |
+| `src/unifi_audit_daemon/metrics.py` | Prometheus metrics for `GET /metrics` |
 | `contrib/member-zone/unifi_protect_audit.py` | Member Zone audit log program that pulls from the daemon |
 | `tests/` | pytest tests, with an in-memory Protect |
-| `docs/` | [configuration](docs/configuration.md), [API](docs/api.md), [overview](docs/overview.md) |
+| `docs/` | [configuration](docs/configuration.md), [API](docs/api.md), [metrics](docs/metrics.md), [overview](docs/overview.md) |
 
 ## Technical details
 
@@ -74,17 +75,24 @@ can't send a bearer token for its images, so it doesn't work through the
 API.)
 
 **API.** Bearer-token auth (`API_TOKEN`) on everything but `/healthz`; the
-contact-sheet GETs also accept `CONTACT_SHEET_TOKEN`. Full details in
-[docs/api.md](docs/api.md).
+contact-sheet GETs also accept `CONTACT_SHEET_TOKEN`, and `/metrics`
+accepts `METRICS_TOKEN`. Full details in [docs/api.md](docs/api.md).
 
 ```
 GET  /healthz
+GET  /metrics                           Prometheus
 GET  /api/v1/status
 GET  /api/v1/events?since=ISO8601       JSON Lines, by time recorded
 GET  /api/v1/contact-sheets
 GET  /api/v1/contact-sheets/latest.jpg  (or YYYY-MM-DD.jpg)
 POST /api/v1/contact-sheets             take one now
 ```
+
+**Metrics.** `GET /metrics` serves Prometheus metrics: sync and
+contact-sheet runs, failures by error, durations, events stored by type,
+Protect's users and cameras, disk use and HTTP requests. Give Prometheus
+its own `METRICS_TOKEN`, which reads nothing else. See
+[docs/metrics.md](docs/metrics.md).
 
 **Member Zone.** Copy `contrib/member-zone/unifi_protect_audit.py` into
 the `audit/` directory under Member Zone's `ACCESS_SCRIPTS_DIR`, make it

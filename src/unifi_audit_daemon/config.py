@@ -83,6 +83,21 @@ def _event_types(env: Mapping[str, str], name: str) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _token(
+    env: Mapping[str, str], name: str, others: Mapping[str, str | None]
+) -> str | None:
+    """An optional extra bearer token: long, and unlike every other token."""
+    token = env.get(name, "").strip() or None
+    if token is None:
+        return None
+    if len(token) < 16:
+        raise ConfigError(f"{name} must be at least 16 characters")
+    for other, value in others.items():
+        if token == value:
+            raise ConfigError(f"{name} must differ from {other}")
+    return token
+
+
 @dataclass(frozen=True)
 class Settings:
     unifi_host: str
@@ -97,6 +112,8 @@ class Settings:
     # A second, read-only token for the contact sheets alone, so they can be
     # shared without the token that reads the audit log. None: API_TOKEN only.
     contact_sheet_token: str | None = field(default=None, repr=False)
+    # A token for GET /metrics alone, for Prometheus. None: API_TOKEN only.
+    metrics_token: str | None = field(default=None, repr=False)
     sync_interval: int = 60
     sync_overlap: int = 600
     backfill_days: int = 7
@@ -117,12 +134,12 @@ class Settings:
         if len(api_token) < 16:
             raise ConfigError("API_TOKEN must be at least 16 characters")
 
-        sheet_token = env.get("CONTACT_SHEET_TOKEN", "").strip() or None
-        if sheet_token is not None:
-            if len(sheet_token) < 16:
-                raise ConfigError("CONTACT_SHEET_TOKEN must be at least 16 characters")
-            if sheet_token == api_token:
-                raise ConfigError("CONTACT_SHEET_TOKEN must differ from API_TOKEN")
+        sheet_token = _token(env, "CONTACT_SHEET_TOKEN", {"API_TOKEN": api_token})
+        metrics_token = _token(
+            env,
+            "METRICS_TOKEN",
+            {"API_TOKEN": api_token, "CONTACT_SHEET_TOKEN": sheet_token},
+        )
 
         data_dir = Path(env.get("DATA_DIR", "").strip() or cls.data_dir)
         sheet_dir = Path(
@@ -149,6 +166,7 @@ class Settings:
             data_dir=data_dir,
             contact_sheet_dir=sheet_dir,
             contact_sheet_token=sheet_token,
+            metrics_token=metrics_token,
             sync_interval=_int(env, "SYNC_INTERVAL", cls.sync_interval, 5, 86400),
             sync_overlap=_int(env, "SYNC_OVERLAP", cls.sync_overlap, 0, 86400),
             backfill_days=_int(env, "BACKFILL_DAYS", cls.backfill_days, 0, 3650),

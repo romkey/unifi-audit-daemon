@@ -22,6 +22,7 @@ def test_defaults() -> None:
     assert settings.data_dir == Path("data")
     assert settings.contact_sheet_dir == Path("contact-sheets")
     assert settings.contact_sheet_token is None
+    assert settings.metrics_token is None
     assert settings.sync_interval == 60
     assert settings.event_types == ()
     assert settings.contact_sheet_time == time(3, 0)
@@ -72,8 +73,10 @@ def test_reads_environment() -> None:
 
 
 def test_secrets_stay_out_of_repr() -> None:
-    text = repr(Settings.from_env(REQUIRED | {"CONTACT_SHEET_TOKEN": "s" * 16}))
+    tokens = {"CONTACT_SHEET_TOKEN": "s" * 16, "METRICS_TOKEN": "m" * 16}
+    text = repr(Settings.from_env(REQUIRED | tokens))
     assert "s" * 16 not in text
+    assert "m" * 16 not in text
     assert "dummy-password" not in text
     assert "t" * 16 not in text
 
@@ -119,6 +122,25 @@ def test_rejects_bad_values(name: str, value: str, message: str) -> None:
 def test_rejects_bad_contact_sheet_token(token: str, message: str) -> None:
     with pytest.raises(ConfigError, match=message):
         Settings.from_env(REQUIRED | {"CONTACT_SHEET_TOKEN": token})
+
+
+def test_metrics_token() -> None:
+    settings = Settings.from_env(REQUIRED | {"METRICS_TOKEN": " " + "m" * 16 + " "})
+    assert settings.metrics_token == "m" * 16
+
+
+@pytest.mark.parametrize(
+    ("token", "message"),
+    [
+        ("short", "METRICS_TOKEN must be at least"),
+        ("t" * 16, "METRICS_TOKEN must differ from API_TOKEN"),
+        ("s" * 16, "METRICS_TOKEN must differ from CONTACT_SHEET_TOKEN"),
+    ],
+)
+def test_rejects_bad_metrics_token(token: str, message: str) -> None:
+    env = REQUIRED | {"CONTACT_SHEET_TOKEN": "s" * 16, "METRICS_TOKEN": token}
+    with pytest.raises(ConfigError, match=message):
+        Settings.from_env(env)
 
 
 @pytest.mark.parametrize(

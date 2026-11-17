@@ -12,6 +12,7 @@ from uiprotect.exceptions import UnifiProtectError
 
 from unifi_audit_daemon.config import Settings
 from unifi_audit_daemon.contact_sheet import ContactSheets, make_contact_sheet
+from unifi_audit_daemon.metrics import Metrics
 from unifi_audit_daemon.protect import ProtectSource
 from unifi_audit_daemon.sync import Syncer
 
@@ -43,8 +44,10 @@ class Daemon:
         source: ProtectSource,
         syncer: Syncer,
         sheets: ContactSheets,
+        metrics: Metrics | None = None,
     ) -> None:
         self.settings = settings
+        self.metrics = metrics or syncer.metrics
         self.source = source
         self.syncer = syncer
         self.sheets = sheets
@@ -80,12 +83,16 @@ class Daemon:
     async def _sync_loop(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
             try:
-                await self.syncer.sync_once()
+                with self.metrics.job("sync"):
+                    await self.syncer.sync_once()
                 self.syncer.status.last_error = None
             except PROTECT_ERRORS as e:
                 logger.warning("sync failed, will retry: %s", e)
                 self.syncer.status.last_error = str(e) or type(e).__name__
                 self.syncer.status.last_error_at = datetime.now(UTC)
+            self.metrics.job_next_run.set(
+                datetime.now(UTC).timestamp() + self.settings.sync_interval, job="sync"
+            )
             await _wait(stop, self.settings.sync_interval)
 
     async def _sheet_loop(self, stop: asyncio.Event) -> None:
@@ -96,6 +103,9 @@ class Daemon:
                 self.settings.timezone,
             )
             logger.info("next contact sheet at %s", self.next_contact_sheet)
+            self.metrics.job_next_run.set(
+                self.next_contact_sheet.timestamp(), job="contact_sheet"
+            )
             # Wake at least hourly, so a clock change can't strand us.
             delay = (self.next_contact_sheet - datetime.now(UTC)).total_seconds()
             woken = await _wait_any(stop, self._sheet_now, min(delay, 3600))
@@ -103,19 +113,21 @@ class Daemon:
                 return
             if woken or datetime.now(UTC) >= self.next_contact_sheet:
                 self._sheet_now.clear()
-                await self.take_contact_sheet()
+                await self.take_contact_sheet("manual" if woken else "scheduled")
 
-    async def take_contact_sheet(self) -> None:
+    async def take_contact_sheet(self, trigger: str = "scheduled") -> None:
         settings = self.settings
         try:
-            await make_contact_sheet(
-                self.source,
-                self.sheets,
-                datetime.now(UTC).astimezone(settings.timezone),
-                tile_width=settings.contact_sheet_tile_width,
-                columns=settings.contact_sheet_columns,
-                keep_days=settings.contact_sheet_retention_days,
-            )
+            with self.metrics.job("contact_sheet", trigger):
+                await make_contact_sheet(
+                    self.source,
+                    self.sheets,
+                    datetime.now(UTC).astimezone(settings.timezone),
+                    tile_width=settings.contact_sheet_tile_width,
+                    columns=settings.contact_sheet_columns,
+                    keep_days=settings.contact_sheet_retention_days,
+                    metrics=self.metrics,
+                )
             self.last_contact_sheet_error = None
         except PROTECT_ERRORS as e:
             logger.warning("contact sheet failed: %s", e)

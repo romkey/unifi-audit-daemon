@@ -149,3 +149,25 @@ def test_default_clock_is_utc_now(tmp_path: Path) -> None:
         backfill=timedelta(0),
     )
     assert syncer.clock().tzinfo is UTC
+
+
+def test_sync_counts_events_and_protect(tmp_path: Path) -> None:
+    clock = Clock(T0)
+    source, syncer = make(tmp_path, clock)
+    source.all_events = [
+        event("a", T0 - timedelta(hours=1)),
+        event("b", T0 - timedelta(minutes=30), type="access", camera=None),
+        event("c", T0 - timedelta(minutes=5)),
+    ]
+    asyncio.run(syncer.sync_once())
+    clock.now = T0 + timedelta(minutes=1)
+    asyncio.run(syncer.sync_once())  # re-reads the overlap; nothing new
+
+    metrics = syncer.metrics
+    assert metrics.events_stored.get(type="motion") == 2
+    assert metrics.events_stored.get(type="access") == 1
+    assert metrics.events_fetched.get() == 4  # "c" twice
+    assert metrics.sync_last_added.get() == 0
+    assert metrics.protect_users.get() == 1
+    assert metrics.protect_cameras.get() == 1
+    assert metrics.protect_info.get(name="", version="") == 1

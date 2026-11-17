@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-16
+
+### Added
+
+- `GET /metrics`: Prometheus metrics for both jobs (runs by trigger and
+  outcome, errors by type, durations, last success and failure, next
+  run), events stored by Protect event type, Protect's users, cameras and
+  console version, contact-sheet snapshot outcomes, audit log and
+  contact-sheet disk use, HTTP requests by route and status, and the
+  process. See docs/metrics.md.
+- `METRICS_TOKEN`: an optional bearer token that reads `/metrics` and
+  nothing else, for Prometheus. Without it `/metrics` takes `API_TOKEN`.
+
 ## [0.2.3] - 2026-10-29
 
 ### Changed

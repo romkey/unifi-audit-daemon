@@ -13,6 +13,7 @@ from unifi_audit_daemon import __version__
 from unifi_audit_daemon.config import ConfigError, Settings
 from unifi_audit_daemon.contact_sheet import ContactSheets
 from unifi_audit_daemon.daemon import Daemon
+from unifi_audit_daemon.metrics import Metrics
 from unifi_audit_daemon.protect import ProtectSource, UiProtect
 from unifi_audit_daemon.server import Api, Json, make_server
 from unifi_audit_daemon.store import AuditStore
@@ -51,14 +52,28 @@ def main(argv: Sequence[str] | None = None) -> int:
 async def run(settings: Settings, source: ProtectSource) -> int:
     store = AuditStore(settings.data_dir)
     sheets = ContactSheets(settings.contact_sheet_dir)
+    metrics = Metrics()
     syncer = Syncer(
         source,
         store,
         overlap=timedelta(seconds=settings.sync_overlap),
         backfill=timedelta(days=settings.backfill_days),
         event_types=settings.event_types,
+        metrics=metrics,
     )
-    daemon = Daemon(settings, source, syncer, sheets)
+    daemon = Daemon(settings, source, syncer, sheets, metrics)
+
+    def collect() -> None:
+        # Sizes and counts only: the metrics never carry the log's content.
+        files, size = store.disk_usage()
+        metrics.audit_log_files.set(files)
+        metrics.audit_log_bytes.set(size)
+        if cursor := store.load_state().cursor:
+            metrics.sync_cursor.set(cursor.timestamp())
+        metrics.contact_sheets_stored.set(len(sheets.dates()))
+        metrics.contact_sheet_bytes.set(sheets.disk_usage())
+
+    metrics.add_collector(collect)
 
     def status() -> Json:
         def iso(value: datetime | None) -> str | None:
@@ -87,6 +102,8 @@ async def run(settings: Settings, source: ProtectSource) -> int:
         Api(
             token=settings.api_token,
             contact_sheet_token=settings.contact_sheet_token,
+            metrics_token=settings.metrics_token,
+            metrics=metrics,
             store=store,
             sheets=sheets,
             status=status,

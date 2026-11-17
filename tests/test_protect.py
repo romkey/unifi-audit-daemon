@@ -61,6 +61,7 @@ class FakeClient:
                 {"id": "c3", "name": None},
             ],
             "users": [{"id": "u1", "name": "Alice"}, {"id": "u2"}, {"name": "?"}],
+            "nvr": {"name": "Console", "version": "6.1.2"},
         }
 
     async def close_session(self) -> None:
@@ -106,6 +107,8 @@ def test_names_and_cameras(wrapped: UiProtect) -> None:
     assert asyncio.run(wrapped.names()) == Names(
         cameras={"c2": "front", "c1": "Back", "c3": "c3"},
         users={"u1": "Alice", "u2": "u2"},
+        console="Console",
+        console_version="6.1.2",
     )
     assert asyncio.run(wrapped.cameras()) == [
         Camera("c1", "Back", connected=False),
@@ -126,3 +129,12 @@ def test_snapshot_and_close(wrapped: UiProtect) -> None:
 
 def test_names_tolerates_a_missing_list() -> None:
     assert protect._names(None) == {}
+
+
+def test_names_tolerates_a_missing_console(wrapped: UiProtect) -> None:
+    async def bare(url: str) -> dict[str, Any]:
+        return {"nvr": None}
+
+    client(wrapped).api_request_obj = bare  # type: ignore[method-assign]
+    names = asyncio.run(wrapped.names())
+    assert (names.console, names.console_version, names.users) == (None, None, {})
